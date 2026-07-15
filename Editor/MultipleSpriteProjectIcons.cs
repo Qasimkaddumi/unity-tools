@@ -15,7 +15,7 @@ namespace KaleemEditor
     public static class MultipleSpriteProjectIcons
     {
         private const string MenuPath = "Tools/Project Icons/Preview Individual Sprites";
-        private const string PrefKey = "Kaleem.MultipleSpriteProjectIcons.Enabled";
+        private const string PrefKey = "MultipleSpriteProjectIcons.Enabled";
 
         // One-column rows are a single ~16px line; the grid layout uses much taller rects. This is
         // how we restrict the override to the list view only.
