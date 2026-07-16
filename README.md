@@ -12,7 +12,7 @@ The package ships as two assemblies:
 
 | Assembly | Location | Purpose |
 | --- | --- | --- |
-| `KaddumiUnityTools.Runtime` | `Runtime/` | Gameplay/runtime services (ads, analytics, auth, consent, save, loading, events, service locator). |
+| `KaddumiUnityTools.Runtime` | `Runtime/` | Gameplay/runtime services (ads, analytics, auth, api, consent, save, loading, statistics, events, service locator). |
 | `KaddumiUnityTools.Editor` | `Editor/` | Editor-only tooling (folder generation, SO reset, project icons, iOS post-build). |
 
 ---
@@ -93,6 +93,30 @@ SDK-agnostic save/load, structurally mirroring the other managers. Game objects 
 - **Providers:** `PlayerPrefsSaveProvider` (every platform, incl. WebGL), `FileSaveProvider` (JSON files under `persistentDataPath`, atomic writes), and `EncryptedFileSaveProvider` (AES-256/PBKDF2) — each with a matching `…SO` asset created via **Assets ▸ Create ▸ Kaddumi ▸ Save ▸ Providers**.
 - **Serialization:** `ISaveSerializer` / `JsonSaveSerializer` (Unity `JsonUtility`, zero dependencies).
 - **Core:** `SaveData`, `SaveMetadata`, `SaveResult`, `SaveError`; config via `SaveConfig`.
+
+### Api System
+`Runtime/Api_System/`
+
+SDK-agnostic HTTP client — the networking counterpart to the other managers.
+
+- **`ApiManager`** — singleton `MonoBehaviour` (`IService`) that builds one shared `ApiClient` from an `ApiConfigSO` and exposes it as `Client`. Owns a `MutableAuthTokenProvider`; call `SetAuthToken` once after sign-in and every subsequent request carries the token.
+- **`ApiClient`** — plain C# class implementing `IApiClient`; drives `UnityWebRequest` via async/await (no coroutine host needed, so it can be constructed and injected directly, including in tests). Builds URLs (base + path + query), attaches default/per-request headers and auth, (de)serializes bodies, and normalizes results into an `ApiResponse` / `ApiResponse<T>` — it never throws for HTTP error statuses.
+- **Config:** `ApiConfigSO` (base URL, timeout, auth header/scheme, default headers) builds an `ApiClientOptions`.
+- **Auth:** `IAuthTokenProvider` / `MutableAuthTokenProvider`.
+- **Core:** `ApiRequest`, `ApiResponse`/`ApiResponse<T>`, `ApiClientOptions`, `ApiException`, `HttpMethod`.
+- **Serialization:** `IApiSerializer` / `UnityJsonSerializer` (Unity `JsonUtility`).
+
+### Game Statistics System
+`Runtime/Game_Statistics_System/`
+
+Player metric tracking with debounced local persistence.
+
+- **`StatisticsManager`** — `DontDestroyOnLoad` singleton `MonoBehaviour`; owns a `PlayerStatisticsController` backed by a `JsonMetricStorage` at `<persistentDataPath>/Statistics/player_stats.json`. Exposes `RegisterMetric`/`UnregisterMetric`, `RecordPlayerAction`, `GetMetric<T>`/`GetMetricValue`/`GetPlayerMetric`, `ResetPlayerMetric`, and observer registration (`AddObserver`/`RemoveObserver`); force-saves on `OnApplicationQuit`.
+- **`PlayerStatisticsController`** — plain C# domain service holding the active metric registry and `IMetricObserver` list. Debounces saves (dirty-flag + timer, default 5s via `Tick`), restores pending values for metrics that register after a save was loaded, and wraps load failures so a corrupted save file can't crash the app.
+- **Core:** `ITrackedMetric` / `ITrackedMetric<T>` (Strategy pattern per metric type), `IMetricStorage` (Repository pattern for I/O), `IMetricObserver`.
+- **Metrics:** `CounterMetric` (running totals), `FrameRateMetric` (aggregated FPS data), `RunMetric` (per-run data).
+- **Trackers:** `FrameRateTracker` — `MonoBehaviour` that samples frame times, updates a `FrameRateMetric`, and reports periodically through the Analytics System.
+- **Infrastructure:** `JsonMetricStorage` (JSON file storage, sync and async).
 
 ### Global Event System
 `Runtime/GlobalEventsSystem/GlobalEventSystem.cs`
