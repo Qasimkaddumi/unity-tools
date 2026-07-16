@@ -17,6 +17,9 @@ namespace Kaddumi.UnityTools.Ads
         [Header("Configuration")]
         [SerializeField] private AdConfig adConfig;
 
+        [Tooltip("Assign a provider ScriptableObject (e.g. AdMobProvider) to choose which ad SDK to use.")]
+        [SerializeField] private AdProviderSO adProvider;
+
         // Polling interval for connectivity checks (Design Doc Section 10)
         [SerializeField] private bool autoLoadAds = true;
 
@@ -46,7 +49,14 @@ namespace Kaddumi.UnityTools.Ads
         {
             Debug.Log("Initializing Ad manager");
 
-            provider = new AdMobProvider();
+            if (adProvider == null)
+            {
+                Debug.LogError("[AdManager] No Ad Provider assigned. Assign an AdProviderSO in the inspector.");
+                onComplete?.Invoke();
+                return;
+            }
+
+            provider = adProvider.CreateProvider();
             provider.SetConsentStatus(Consent.ConsentService.Instance.IsConsentGranted);
             ConsentService.Instance.OnConsentChanged += (consent) =>
             {

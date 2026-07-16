@@ -3,6 +3,7 @@ using Kaddumi.UnityTools.Analytics.Providers;
 using Kaddumi.UnityTools.Consent;
 using Kaddumi.UnityTools.Services;
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Kaddumi.UnityTools.Analytics
@@ -16,7 +17,8 @@ namespace Kaddumi.UnityTools.Analytics
 
 
         [Header("Configuration")]
-        [SerializeField] private bool enableDebugLogging = true;
+        [Tooltip("Assign provider ScriptableObjects (e.g. Firebase, Debug Logger) to choose which analytics backends to use. All assigned providers receive events.")]
+        [SerializeField] private List<AnalyticsProviderSO> providers = new List<AnalyticsProviderSO>();
 
         private void Awake()
         {
@@ -60,27 +62,46 @@ namespace Kaddumi.UnityTools.Analytics
             };
 
 
-            // 3. Register Providers
-            if (enableDebugLogging && Application.isEditor)
+            // 3. Register the providers selected in the inspector
+            var selectedProviders = new List<AnalyticsProviderSO>();
+            foreach (var providerSO in providers)
             {
-                Service.RegisterProvider(new DebugLoggerProvider(), onComplete);
-            }
-            else
-
-            {
-                Service.RegisterProvider(new FirebaseAnalyticsProvider(), onComplete);
+                if (providerSO != null) selectedProviders.Add(providerSO);
             }
 
-            // 4. Set Initial State
+            if (selectedProviders.Count == 0)
+            {
+                Debug.LogWarning("[AnalyticsManager] No analytics providers assigned in the inspector.");
+                FinalizeInitialization(onComplete);
+                return;
+            }
+
+            int remaining = selectedProviders.Count;
+            foreach (var providerSO in selectedProviders)
+            {
+                Service.RegisterProvider(providerSO.CreateProvider(), () =>
+                {
+                    remaining--;
+                    if (remaining == 0)
+                    {
+                        FinalizeInitialization(onComplete);
+                    }
+                });
+            }
+        }
+
+        // 4. Set initial consent state and fire the startup event once all providers are ready.
+        private void FinalizeInitialization(Action onComplete)
+        {
             Service.SetConsentStatus(ConsentService.Instance.IsConsentGranted);
 
-            // 5. Check Flow
             if (ConsentService.Instance.IsConsentGranted)
             {
                 // Already has permission from previous session
                 Service.LogEvent("app_start");
             }
 
+            onComplete?.Invoke();
         }
 
 
