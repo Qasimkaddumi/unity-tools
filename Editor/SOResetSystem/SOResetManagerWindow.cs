@@ -12,7 +12,7 @@ public class SOResetManagerWindow : EditorWindow
     private SOResetSettings settings;
     private Vector2 scrollPosition;
 
-    [MenuItem("Tools/SO Reset Manager")]
+    [MenuItem("Tools/Unity Tools/ScriptableObject Reset Manager")]
     public static void ShowWindow()
     {
         GetWindow<SOResetManagerWindow>("SO Resetter");

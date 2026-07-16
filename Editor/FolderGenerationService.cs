@@ -129,7 +129,7 @@ namespace Kaddumi.UnityTools.FolderGeneration.Editor
         private bool generateGitKeep = true;
         private Vector2 scrollPosition;
 
-        [MenuItem("Tools/Project Setup/Folder Generator")]
+        [MenuItem("Tools/Unity Tools/Folder Generator")]
         public static void ShowWindow()
         {
             var window = GetWindow<FolderStructureWindow>("Folder Generator");

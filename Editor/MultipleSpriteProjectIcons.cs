@@ -14,7 +14,7 @@ namespace Kaddumi.UnityTools.ProjectIcons.Editor
     [InitializeOnLoad]
     public static class MultipleSpriteProjectIcons
     {
-        private const string MenuPath = "Tools/Project Icons/Preview Individual Sprites";
+        private const string MenuPath = "Tools/Unity Tools/Multi-Sprite Icon Preview";
         private const string PrefKey = "MultipleSpriteProjectIcons.Enabled";
 
         // One-column rows are a single ~16px line; the grid layout uses much taller rects. This is
