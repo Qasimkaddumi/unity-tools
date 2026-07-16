@@ -90,7 +90,7 @@ SDK-agnostic save/load, structurally mirroring the other managers. Game objects 
 
 - **`SaveManager`** — singleton `MonoBehaviour` (`IService`) owning a `SaveService`; exposes `Save`/`Load`/`Delete`/`HasSave`/`GetMetadata`, an `ActiveSlot`, and `OnSaved` / `OnLoaded` / `OnError` events. Drives auto-save, save-on-pause/quit, and play-time tracking from `SaveConfig`.
 - **`SaveService`** — plain-C# domain service that owns the `ISaveable` registry and orchestrates capture → serialize → write and read → deserialize → restore.
-- **Providers:** `PlayerPrefsSaveProvider` (every platform, incl. WebGL), `FileSaveProvider` (JSON files under `persistentDataPath`, atomic writes), and `EncryptedFileSaveProvider` (AES-256/PBKDF2) — each with a matching `…SO` asset created via **Assets ▸ Create ▸ Kaddumi ▸ Save ▸ Providers**.
+- **Providers:** `PlayerPrefsSaveProvider` (every platform, incl. WebGL), `FileSaveProvider` (JSON files under `persistentDataPath`, atomic writes), `EncryptedFileSaveProvider` (AES-256/PBKDF2), and `CloudSaveProvider` (saves to a remote database over HTTP via the Api System, scoped to the signed-in player's auth token) — each with a matching `…SO` asset created via **Assets ▸ Create ▸ Kaddumi ▸ Save ▸ Providers**.
 - **Serialization:** `ISaveSerializer` / `JsonSaveSerializer` (Unity `JsonUtility`, zero dependencies).
 - **Core:** `SaveData`, `SaveMetadata`, `SaveResult`, `SaveError`; config via `SaveConfig`.
 
