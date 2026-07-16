@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace KaleemEditor
+namespace Kaddumi.UnityTools.ProjectIcons.Editor
 {
     /// <summary>
     /// In the Project window's one-column (list) layout, draws each individual sprite's own sliced

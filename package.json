@@ -1,0 +1,12 @@
+{
+  "name": "com.kaddumi.UnityTools",
+  "version": "0.1.0",
+  "displayName": "Unity Tools",
+  "description": "A set of tools for any unity project",
+  "unity": "6000.3",
+  "author": {
+    "name": "Qasim kaddumi",
+    "url": "https://qasimkaddumi.github.io/portfolio/",
+    "email": "kasemkadumi@gmail.com"
+  }
+}

@@ -5,7 +5,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-namespace UnityProjectSetup.Tools
+namespace Kaddumi.UnityTools.FolderGeneration.Editor
 {
     // ----------------------------------------------------------------------------
     // Service Layer: Handles the business logic (I/O and File Generation)

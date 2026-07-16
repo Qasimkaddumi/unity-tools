@@ -1,0 +1,16 @@
+{
+    "name": "KaddumiUnityTools.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "GUID:7e5ecd0a8db2842409ec0af5b015325e"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

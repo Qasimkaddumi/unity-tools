@@ -2,6 +2,9 @@ using UnityEditor;
 using UnityEngine;
 using System.Linq;
 
+namespace Kaddumi.UnityTools.SOResetSystem.Editor
+{
+
 // This class represents our Presentation layer (UI).
 // It is responsible ONLY for displaying data and handling user inputs.
 public class SOResetManagerWindow : EditorWindow
@@ -207,4 +210,6 @@ public class SOResetManagerWindow : EditorWindow
         // Tell Unity this asset has been changed so it gets saved when you save the project
         EditorUtility.SetDirty(settings);
     }
+}
+
 }

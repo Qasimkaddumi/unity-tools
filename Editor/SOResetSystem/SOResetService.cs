@@ -1,6 +1,9 @@
 using UnityEditor;
 using UnityEngine;
 
+namespace Kaddumi.UnityTools.SOResetSystem.Editor
+{
+
 // This class represents our Logic layer (Service).
 // It handles initialization, finding/creating data, and the core resetting process.
 [InitializeOnLoad]
@@ -89,4 +92,6 @@ public static class SOResetService
         onDisableMethod?.Invoke(scriptableObject, null);
         EditorUtility.SetDirty(scriptableObject);
     }
+}
+
 }
