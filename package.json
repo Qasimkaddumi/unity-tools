@@ -8,5 +8,8 @@
     "name": "Qasim kaddumi",
     "url": "https://qasimkaddumi.github.io/portfolio/",
     "email": "kasemkadumi@gmail.com"
+  },
+  "dependencies": {
+    "com.unity.ugui": "2.0.0"
   }
 }
