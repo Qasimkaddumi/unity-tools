@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Kaddumi.UnityTools.Ads.Data
 {
    
-    [CreateAssetMenu(fileName = "AdConfig", menuName = "Ads/AdConfig")]
+    [CreateAssetMenu(fileName = "AdConfig", menuName = "Kaddumi/Ads/AdConfig")]
     public class AdConfig : ScriptableObject
     {
         [Header("App ID (Optional for some SDKs)")]

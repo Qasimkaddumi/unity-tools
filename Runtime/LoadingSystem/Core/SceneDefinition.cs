@@ -7,7 +7,7 @@ using UnityEditor;
 namespace Kaddumi.UnityTools.LoadingSystem.Core
 {
 
-    [CreateAssetMenu(fileName = "New Scene Definition", menuName = "Scene Management/Scene Definition")]
+    [CreateAssetMenu(fileName = "New Scene Definition", menuName = "Kaddumi/Scene Management/Scene Definition")]
     public class SceneDefinition : ScriptableObject
     {
 #if UNITY_EDITOR

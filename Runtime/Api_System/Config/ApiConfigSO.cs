@@ -10,7 +10,7 @@ namespace Kaddumi.UnityTools.Api.Config
     /// asset per environment (dev / staging / prod), swapped on the <c>ApiManager</c>
     /// without touching code. Mirrors how <c>AudioSettingsSO</c> drives the audio system.
     /// </summary>
-    [CreateAssetMenu(fileName = "SO_ApiConfig", menuName = "Kaleem/Api/Api Config")]
+    [CreateAssetMenu(fileName = "SO_ApiConfig", menuName = "Kaddumi/Api/Api Config")]
     public class ApiConfigSO : ScriptableObject
     {
         [Serializable]

@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Kaddumi.UnityTools.LoadingSystem.Core
 {
-    [CreateAssetMenu(fileName = "New Level Definition", menuName = "Scene Management/Level Definition")]
+    [CreateAssetMenu(fileName = "New Level Definition", menuName = "Kaddumi/Scene Management/Level Definition")]
     public class LevelDefinition : SceneDefinition
     {
         [SerializeField] private int levelID;

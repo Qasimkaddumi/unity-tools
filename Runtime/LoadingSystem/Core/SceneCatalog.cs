@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Kaddumi.UnityTools.LoadingSystem.Core
 {
-    [CreateAssetMenu(fileName = "Scene Catalog", menuName = "Scene Management/Scene Catalog")]
+    [CreateAssetMenu(fileName = "Scene Catalog", menuName = "Kaddumi/Scene Management/Scene Catalog")]
     public class SceneCatalog : ScriptableObject
     {
 
