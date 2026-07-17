@@ -48,5 +48,23 @@ namespace Kaddumi.UnityTools.Auth.Core
             Method = AuthMethod.Custom,
             Token = token
         };
+
+        /// <summary>
+        /// Google Play Games Services sign-in. The provider drives the native flow, so no
+        /// token is required here (it is fetched from the Play Games SDK on-device).
+        /// </summary>
+        public static AuthCredentials GooglePlayGames() => new AuthCredentials
+        {
+            Method = AuthMethod.GooglePlayGames
+        };
+
+        /// <summary>
+        /// Apple Game Center sign-in. The provider drives the native flow, so no token is
+        /// required here (it is fetched from GameKit on-device).
+        /// </summary>
+        public static AuthCredentials GameCenter() => new AuthCredentials
+        {
+            Method = AuthMethod.GameCenter
+        };
     }
 }

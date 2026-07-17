@@ -114,6 +114,14 @@ namespace Kaddumi.UnityTools.Auth
         public void SignInWithOAuth(AuthMethod method, string token, string secret = null, Action<AuthResult> onComplete = null) =>
             SignIn(AuthCredentials.OAuth(method, token, secret), onComplete);
 
+        /// <summary>Sign in with Google Play Games (the provider runs the native Android flow).</summary>
+        public void SignInWithGooglePlayGames(Action<AuthResult> onComplete = null) =>
+            SignIn(AuthCredentials.GooglePlayGames(), onComplete);
+
+        /// <summary>Sign in with Apple Game Center (the provider runs the native Apple flow).</summary>
+        public void SignInWithGameCenter(Action<AuthResult> onComplete = null) =>
+            SignIn(AuthCredentials.GameCenter(), onComplete);
+
         public void SignInWithCustomToken(string token, Action<AuthResult> onComplete = null) =>
             SignIn(AuthCredentials.Custom(token), onComplete);
 
