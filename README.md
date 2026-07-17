@@ -12,7 +12,7 @@ The package ships as two assemblies:
 
 | Assembly | Location | Purpose |
 | --- | --- | --- |
-| `KaddumiUnityTools.Runtime` | `Runtime/` | Gameplay/runtime services (ads, analytics, auth, api, consent, save, loading, statistics, events, service locator). |
+| `KaddumiUnityTools.Runtime` | `Runtime/` | Gameplay/runtime services (ads, analytics, auth, api, consent, save, loading, audio, statistics, events, service locator). |
 | `KaddumiUnityTools.Editor` | `Editor/` | Editor-only tooling (folder generation, SO reset, project icons, iOS post-build). |
 
 ---
@@ -82,6 +82,19 @@ Scene-flow and loading-screen manager.
 - **Operations:** `ILoadingOperation`, `SceneTransitionOperation`, `ActionLoadingOperation`.
 - **Data:** `SceneCatalog`, `SceneDefinition`, `LevelDefinition`.
 - **UI:** `LoadingScreen`, `ScreenFader`.
+
+### Audio System
+`Runtime/Audio_System/`
+
+Backend-agnostic audio via the `IAudioProvider` interface and `AudioProviderSO` provider assets — pooled SFX, crossfaded music, AudioMixer buses with ducking, and sounds authored as reusable assets you can play by reference or by string ID. Bus volumes persist through the Save System.
+
+- **`AudioManager`** — singleton `MonoBehaviour` (`IService`) and the public API. Plays a `SoundDefinition` asset directly or resolves a string ID via a `SoundLibrary`, and forwards to the active provider; owns per-bus volume/mute (source of truth) and the duck policy. Exposes `PlaySfx`/`PlaySfx2D` (asset or ID overloads), `PlayMusic`/`StopMusic`, `SetBusVolume`/`GetBusVolume`/`SetBusMuted`/`ToggleMute`, `Duck`/`DuckMusicForVoice`/`Unduck`, `Stop`, `PauseAll`/`ResumeAll`, and an `OnBusChanged` event. Never touches `AudioSource` directly.
+- **Providers:** `UnityAudioProvider` / `UnityAudioProviderSO` — the default backend driving Unity's built-in AudioSource/AudioMixer. Self-contained: creates its own `DontDestroyOnLoad` host with a pooled voice set (voice-stealing per sound), two music sources for A/B crossfade, and decibel bus control. Create the asset via **Assets ▸ Create ▸ Kaddumi ▸ Audio ▸ Providers ▸ UnityAudio**. Swap in FMOD/Wwise later by implementing `IAudioProvider`.
+- **Persistence:** an internal `AudioSettingsSaveable` (`ISaveable`, key `audio.settings`) rides the `SaveManager`, so bus volumes/mutes save and restore with each slot; falls back to `AudioConfig` defaults when there is no save yet.
+- **Data:** `SoundDefinition` — a per-sound ScriptableObject asset (clips with random clip/pitch variation, bus, looping, 2D/3D spatial settings, voice cap) created via **Assets ▸ Create ▸ Kaddumi ▸ Audio ▸ Sound**; drop it into a component to play directly, or list several in a **`SoundLibrary`** for string-ID lookup (by `Id`, or asset name when blank). **`AudioConfig`** holds the mixer + per-bus bindings/exposed params, pool sizing, fade/duck defaults, and linear↔decibel conversion. All created under **Assets ▸ Create ▸ Kaddumi ▸ Audio**.
+- **Core:** `AudioBus` (Master/Music/SFX/UI/Ambience/Voice), `AudioHandle` (generation-stamped voice reference so stopping a recycled voice is a safe no-op).
+
+Setup: build an AudioMixer with a group per bus, expose each group's Volume parameter, paste those names into `AudioConfig`, then add `AudioManager` under the ServiceLocator and assign the config, library, and provider assets. No SDK or define symbol required — it uses Unity's built-in audio.
 
 ### Save System
 `Runtime/Save_System/`
