@@ -1,7 +1,9 @@
 {
     "name": "KaddumiUnityTools.Editor",
     "rootNamespace": "",
-    "references": [],
+    "references": [
+        "KaddumiUnityTools.Runtime"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
