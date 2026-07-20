@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace UnityInterfaceSerialization.Runtime
+namespace Kaddumi.UnityTools.InterfaceSerialization
 {
     /// <summary>
     /// A generic wrapper that allows Unity to serialize interfaces.

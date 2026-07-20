@@ -5,7 +5,7 @@ using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
-namespace UnityInterfaceSerialization.Editor
+namespace Kaddumi.UnityTools.InterfaceSerialization.Editor
 {
     /// <summary>
     /// Custom Inspector GUI for InterfaceReference&lt;T&gt;.
@@ -14,7 +14,7 @@ namespace UnityInterfaceSerialization.Editor
     /// validates drag-and-drop (extracting a matching component from a dropped GameObject).
     /// Note: must live in an 'Editor' folder / editor-only assembly.
     /// </summary>
-    [CustomPropertyDrawer(typeof(Runtime.InterfaceReference<>))]
+    [CustomPropertyDrawer(typeof(InterfaceReference<>))]
     public class InterfaceReferenceDrawer : PropertyDrawer
     {
         private const string TargetFieldName = "targetObject";
