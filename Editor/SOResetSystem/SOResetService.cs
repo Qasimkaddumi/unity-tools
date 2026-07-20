@@ -1,3 +1,4 @@
+using Kaddumi.UnityTools.ToolManager.Editor;
 using UnityEditor;
 using UnityEngine;
 
@@ -6,15 +7,25 @@ namespace Kaddumi.UnityTools.SOResetSystem.Editor
 
 // This class represents our Logic layer (Service).
 // It handles initialization, finding/creating data, and the core resetting process.
-[InitializeOnLoad]
+//
+// The auto-reset behaviour is switched on/off through the Tool Manager via SOResetToolModule; the
+// service itself no longer subscribes on load. The settings asset and manager window are unaffected.
 public static class SOResetService
 {
     private const string defaultSettingsFolder = "Assets/Editor";
     private const string defaultSettingsPath = "Assets/Editor/SOResetSettings.asset";
 
-    static SOResetService()
+    /// <summary> Start listening for the return to Edit Mode. Idempotent. </summary>
+    public static void Subscribe()
     {
+        EditorApplication.playModeStateChanged -= OnPlayModeChanged;
         EditorApplication.playModeStateChanged += OnPlayModeChanged;
+    }
+
+    /// <summary> Stop listening; tracked objects are no longer reset on Play Mode exit. </summary>
+    public static void Unsubscribe()
+    {
+        EditorApplication.playModeStateChanged -= OnPlayModeChanged;
     }
 
     private static void OnPlayModeChanged(PlayModeStateChange state)
@@ -92,6 +103,26 @@ public static class SOResetService
         onDisableMethod?.Invoke(scriptableObject, null);
         EditorUtility.SetDirty(scriptableObject);
     }
+}
+
+/// <summary>
+/// Exposes <see cref="SOResetService"/>'s auto-reset behaviour to the Tool Manager so it can be
+/// turned on and off. When active, tracked ScriptableObjects are reset on returning to Edit Mode.
+/// The manager window (Tools ▸ Unity Tools ▸ ScriptableObject Reset Manager) and its settings asset
+/// remain available regardless of this toggle.
+/// </summary>
+public sealed class SOResetToolModule : IEditorToolModule
+{
+    public string Id => "SOResetService";
+    public string DisplayName => "ScriptableObject Auto-Reset";
+    public string Description =>
+        "Resets tracked ScriptableObjects (calls their OnDisable) when Play Mode stops, so play-mode " +
+        "state doesn't leak into serialized assets. Edit the tracked list in the SO Reset Manager window.";
+    public string Category => "Play Mode";
+    public bool DefaultEnabled => true;
+
+    public void OnActivated() => SOResetService.Subscribe();
+    public void OnDeactivated() => SOResetService.Unsubscribe();
 }
 
 }
