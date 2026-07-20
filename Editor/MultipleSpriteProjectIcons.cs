@@ -1,3 +1,4 @@
+using Kaddumi.UnityTools.ToolManager.Editor;
 using UnityEditor;
 using UnityEngine;
 
@@ -10,37 +11,39 @@ namespace Kaddumi.UnityTools.ProjectIcons.Editor
     /// actual items rather than a generic icon or the whole packed atlas.
     ///
     /// The grid / two-column layout already renders full previews, so it is left untouched.
+    ///
+    /// Registered as an <see cref="IEditorToolModule"/> so it can be switched on/off from the
+    /// Tool Manager window (Tools > Unity Tools > Tool Manager). The registry owns its lifecycle.
     /// </summary>
-    [InitializeOnLoad]
-    public static class MultipleSpriteProjectIcons
+    public sealed class SpritePreviewToolModule : IEditorToolModule
     {
-        private const string MenuPath = "Tools/Unity Tools/Multi-Sprite Icon Preview";
-        private const string PrefKey = "MultipleSpriteProjectIcons.Enabled";
+        // Kept as the historical EditorPrefs root ("MultipleSpriteProjectIcons.Enabled") so any
+        // previously saved on/off state carries over to the Tool Manager.
+        public string Id => "MultipleSpriteProjectIcons";
+        public string DisplayName => "Multi-Sprite Icon Preview";
+        public string Description =>
+            "Draws each sliced sprite's own preview over the generic icon in the Project window's " +
+            "list view, with an enlarged preview on hover.";
+        public string Category => "Project Window";
+        public bool DefaultEnabled => true;
 
         // One-column rows are a single ~16px line; the grid layout uses much taller rects. This is
         // how we restrict the override to the list view only.
         private const float MaxListRowHeight = 20f;
 
-        private static bool _enabled;
-
-        static MultipleSpriteProjectIcons()
-        {
-            _enabled = EditorPrefs.GetBool(PrefKey, true);
-            if (_enabled)
-                Enable();
-        }
-
-        private static void Enable()
+        public void OnActivated()
         {
             EditorApplication.projectWindowItemInstanceOnGUI -= OnProjectWindowItem;
             EditorApplication.projectWindowItemInstanceOnGUI += OnProjectWindowItem;
             HoverPreviewController.SetActive(true);
+            EditorApplication.RepaintProjectWindow();
         }
 
-        private static void Disable()
+        public void OnDeactivated()
         {
             EditorApplication.projectWindowItemInstanceOnGUI -= OnProjectWindowItem;
             HoverPreviewController.SetActive(false);
+            EditorApplication.RepaintProjectWindow();
         }
 
         private static void OnProjectWindowItem(int instanceId, Rect rect)
@@ -104,25 +107,6 @@ namespace Kaddumi.UnityTools.ProjectIcons.Editor
             return EditorGUIUtility.isProSkin
                 ? new Color(0.219f, 0.219f, 0.219f)
                 : new Color(0.760f, 0.760f, 0.760f);
-        }
-
-        [MenuItem(MenuPath)]
-        private static void ToggleEnabled()
-        {
-            _enabled = !_enabled;
-            EditorPrefs.SetBool(PrefKey, _enabled);
-            if (_enabled)
-                Enable();
-            else
-                Disable();
-            EditorApplication.RepaintProjectWindow();
-        }
-
-        [MenuItem(MenuPath, validate = true)]
-        private static bool ToggleEnabledValidate()
-        {
-            Menu.SetChecked(MenuPath, _enabled);
-            return true;
         }
     }
 
