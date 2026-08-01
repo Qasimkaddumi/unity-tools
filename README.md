@@ -5,7 +5,7 @@ A modular set of drop-in tools and services for any Unity project.
 - **Package:** `com.kaddumi.unity-tools`
 - **Version:** `0.1.0`
 - **Unity:** `6000.3` or newer
-- **Dependencies:** `com.unity.ugui` (2.0.0)
+- **Dependencies:** `com.unity.ugui` (2.0.0), `com.unity.timeline` (1.8.12)
 - **Author:** [Qasim Kaddumi](https://qasimkaddumi.github.io/portfolio/)
 
 Two assemblies: `KaddumiUnityTools.Runtime` (`Runtime/`) for gameplay services, and `KaddumiUnityTools.Editor` (`Editor/`) for editor-only tooling.
@@ -26,7 +26,7 @@ Most runtime systems follow the same pattern: a singleton **Manager** (`IService
 | Authentication | `Authentication_System/` | `AuthManager` routes sign-in to Firebase, Unity Gaming Services, or PlayFab. |
 | Consent | `ConsentService/` | `ConsentService` gates personalized ads/analytics behind GDPR/CCPA consent (Google UMP or a built-in manual dialog). |
 | Loading | `LoadingSystem/` | `LoadingManager` drives scene transitions and loading-screen UI from a `SceneCatalog`. |
-| Audio | `Audio_System/` | `AudioManager` — pooled SFX, crossfaded music, mixer buses with ducking; plays `SoundDefinition` assets by reference or string ID. |
+| Audio | `Audio_System/` | `AudioManager` — pooled SFX, crossfaded music, mixer buses with ducking; plays `SoundDefinition` assets by reference or string ID. Includes a `GameAudioTrack`/`GameAudioClip` Timeline track that routes sounds through the audio system instead of Timeline's built-in Audio Track. |
 | Save | `Save_System/` | `SaveManager` persists `ISaveable` objects to PlayerPrefs, JSON file, encrypted file, or a remote API. |
 | Api | `Api_System/` | `ApiManager`/`ApiClient` — async HTTP client with auth-token handling, no coroutine host needed. |
 | Game Statistics | `Game_Statistics_System/` | `StatisticsManager` tracks per-player metrics (counters, FPS, per-run data) with debounced JSON persistence. |
