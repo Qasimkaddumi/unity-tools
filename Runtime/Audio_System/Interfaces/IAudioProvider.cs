@@ -52,6 +52,18 @@ namespace Kaddumi.UnityTools.Audio.Interfaces
         /// <summary>Stops a specific voice, fading over <paramref name="fadeSeconds"/>. No-op if the handle is stale.</summary>
         void Stop(AudioHandle handle, float fadeSeconds);
 
+        /// <summary>Sets a live voice's linear volume (per-source, on top of its bus). No-op if the handle is stale.</summary>
+        void SetVoiceVolume(AudioHandle handle, float volume);
+
+        /// <summary>Sets a live voice's pitch / playback rate (1 = normal). No-op if the handle is stale.</summary>
+        void SetVoicePitch(AudioHandle handle, float pitch);
+
+        /// <summary>Toggles looping on a live voice. No-op if the handle is stale.</summary>
+        void SetVoiceLoop(AudioHandle handle, bool loop);
+
+        /// <summary>Seeks a live voice to a playback position in seconds (clamped to the clip). No-op if the handle is stale.</summary>
+        void SetVoiceTime(AudioHandle handle, float seconds);
+
         /// <summary>Stops every active voice on a bus immediately.</summary>
         void StopBus(AudioBus bus);
 

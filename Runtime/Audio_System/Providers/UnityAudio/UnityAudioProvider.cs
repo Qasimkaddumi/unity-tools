@@ -320,6 +320,33 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             _pool.StartCoroutine(FadeOutVoice(voice, index, fadeSeconds));
         }
 
+        public void SetVoiceVolume(AudioHandle handle, float volume)
+        {
+            if (_pool.TryResolve(handle, out var voice, out _) && voice.Source != null)
+                voice.Source.volume = Mathf.Max(0f, volume);
+        }
+
+        public void SetVoicePitch(AudioHandle handle, float pitch)
+        {
+            if (_pool.TryResolve(handle, out var voice, out _) && voice.Source != null)
+                voice.Source.pitch = pitch;
+        }
+
+        public void SetVoiceLoop(AudioHandle handle, bool loop)
+        {
+            if (_pool.TryResolve(handle, out var voice, out _) && voice.Source != null)
+                voice.Source.loop = loop;
+        }
+
+        public void SetVoiceTime(AudioHandle handle, float seconds)
+        {
+            if (!_pool.TryResolve(handle, out var voice, out _) || voice.Source == null) return;
+            var src = voice.Source;
+            if (src.clip == null) return;
+            // AudioSource.time throws if set to/after the clip length; leave a small margin.
+            src.time = Mathf.Clamp(seconds, 0f, Mathf.Max(0f, src.clip.length - 0.01f));
+        }
+
         private IEnumerator FadeOutVoice(AudioVoicePool.Voice voice, int index, float seconds)
         {
             int generation = voice.Generation;

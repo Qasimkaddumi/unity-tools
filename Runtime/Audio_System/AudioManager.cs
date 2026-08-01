@@ -227,6 +227,18 @@ namespace Kaddumi.UnityTools.Audio
         /// <summary>Stops a specific SFX voice, optionally fading. Safe no-op on stale handles.</summary>
         public void Stop(AudioHandle handle, float fadeSeconds = 0f) => _provider?.Stop(handle, fadeSeconds);
 
+        /// <summary>Sets a live voice's linear volume (per-source, on top of its bus). Safe no-op on stale handles.</summary>
+        public void SetVoiceVolume(AudioHandle handle, float volume) => _provider?.SetVoiceVolume(handle, volume);
+
+        /// <summary>Sets a live voice's pitch / playback rate (1 = normal). Safe no-op on stale handles.</summary>
+        public void SetVoicePitch(AudioHandle handle, float pitch) => _provider?.SetVoicePitch(handle, pitch);
+
+        /// <summary>Toggles looping on a live voice. Safe no-op on stale handles.</summary>
+        public void SetVoiceLoop(AudioHandle handle, bool loop) => _provider?.SetVoiceLoop(handle, loop);
+
+        /// <summary>Seeks a live voice to a playback position in seconds (clamped to the clip). Safe no-op on stale handles.</summary>
+        public void SetVoiceTime(AudioHandle handle, float seconds) => _provider?.SetVoiceTime(handle, seconds);
+
         /// <summary>Stops every active voice on a bus.</summary>
         public void StopBus(AudioBus bus) => _provider?.StopBus(bus);
 
