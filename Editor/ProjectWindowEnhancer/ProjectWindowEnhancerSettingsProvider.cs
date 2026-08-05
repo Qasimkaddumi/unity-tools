@@ -25,10 +25,14 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
 
             EditorGUI.BeginChangeCheck();
 
+            EditorGUILayout.LabelField("Appearance", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(serializedSettings.FindProperty("enableMinimalMode"), new GUIContent("Enable Minimal Mode"));
+            EditorGUILayout.Space();
+
             EditorGUILayout.LabelField("Customization", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(serializedSettings.FindProperty("enableCustomIcons"), new GUIContent("Enable Custom Icons"));
             EditorGUILayout.PropertyField(serializedSettings.FindProperty("enableCustomColors"), new GUIContent("Enable Custom Colors"));
-            EditorGUILayout.PropertyField(serializedSettings.FindProperty("enableContentMinimap"), new GUIContent("Enable Content Minimap"));
+            EditorGUILayout.PropertyField(serializedSettings.FindProperty("enableAutomaticIcons"), new GUIContent("Enable Automatic Icons"));
 
             if (EditorGUI.EndChangeCheck())
             {

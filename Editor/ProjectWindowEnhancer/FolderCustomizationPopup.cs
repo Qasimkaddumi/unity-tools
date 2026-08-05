@@ -53,7 +53,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             window.Init(guid);
         }
 
-        private void Init(string guid)
+        public void Init(string guid)
         {
             targetGuid = guid;
             config = ProjectFolderData.instance.GetConfig(guid);

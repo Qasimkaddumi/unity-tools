@@ -108,9 +108,29 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
                         evt.StopPropagation();
                     });
 
+                    var customizeBtn = new Button(() => 
+                    {
+                        var active = Selection.activeObject;
+                        if (active != null)
+                        {
+                            string path = AssetDatabase.GetAssetPath(active);
+                            if (AssetDatabase.IsValidFolder(path))
+                            {
+                                string guid = AssetDatabase.AssetPathToGUID(path);
+                                var window = EditorWindow.GetWindow<FolderCustomizationPopup>(true, "Customize Folder", true);
+                                window.minSize = new Vector2(250, 320);
+                                window.maxSize = new Vector2(250, 320);
+                                // We need to make Init public or internal
+                                window.GetType().GetMethod("Init", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)?.Invoke(window, new object[] { guid });
+                            }
+                        }
+                    }) { text = "⚙ Customize" };
+                    customizeBtn.style.marginLeft = new StyleLength(StyleKeyword.Auto); // Push to the right
+                    
                     navBar.Add(backBtn);
                     navBar.Add(fwdBtn);
                     navBar.Add(bookmarksContainer);
+                    navBar.Add(customizeBtn);
 
                     activeBookmarkContainers.Add(bookmarksContainer);
                     RefreshBookmarks(bookmarksContainer);
