@@ -41,6 +41,9 @@ Enable/disable any of these from **Tools ▸ Unity Tools ▸ Tool Manager** (cho
 | Folder Generation | `Editor/FolderGenerationService.cs` | Generates a project folder structure from a list of paths. |
 | SO Reset System | `Editor/SOResetSystem/` | Resets tracked ScriptableObjects when Play Mode stops. |
 | Multi-Sprite Icon Preview | `Editor/MultipleSpriteProjectIcons.cs` | Shows per-sprite thumbnails (incl. sub-sprites) in the Project window's list view, with hover zoom. |
+| Model Icon Preview | `Editor/ModelProjectIcons.cs` | Shows 3D model previews over the generic model icon in the Project window's list view. |
+| Prefab Icon Preview | `Editor/PrefabPreviewProjectIcons.cs` | Shows actual previews of prefabs over the generic prefab icon in the Project window's list view. |
+| Material Icon Preview | `Editor/MaterialProjectIcons.cs` | Shows material previews over the generic material icon in the Project window's list view. |
 | iOS Post-Process Build | `Editor/IosPostProcessBuild.cs` | Adds User Tracking usage description and SKAdNetwork IDs to the built Xcode `Info.plist`. |
 
 ## Scripting Define Symbols
