@@ -9,14 +9,11 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
     public class FolderConfig
     {
         public string guid;
-        public Color color = Color.clear;
-        public string iconName = "";
-        public string customIconGuid = "";
-        public bool isBookmarked = false;
+        public bool isBookmarked;
     }
 
-    [FilePath("ProjectSettings/ProjectWindowEnhancerData.asset", FilePathAttribute.Location.ProjectFolder)]
-    public class ProjectFolderData : ScriptableSingleton<ProjectFolderData>
+    [FilePath("ProjectSettings/ProjectWindowNavigatorData.asset", FilePathAttribute.Location.ProjectFolder)]
+    public class ProjectBookmarkData : ScriptableSingleton<ProjectBookmarkData>
     {
         public List<FolderConfig> folderConfigs = new List<FolderConfig>();
 
@@ -28,20 +25,6 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
         public FolderConfig GetConfig(string guid)
         {
             return folderConfigs.Find(x => x.guid == guid);
-        }
-
-        public void SetConfig(string guid, Color color, string iconName, string customIconGuid = "")
-        {
-            var config = GetConfig(guid);
-            if (config == null)
-            {
-                config = new FolderConfig { guid = guid };
-                folderConfigs.Add(config);
-            }
-            config.color = color;
-            config.iconName = iconName;
-            config.customIconGuid = customIconGuid;
-            Save();
         }
 
         public void ClearConfig(string guid)

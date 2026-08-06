@@ -16,6 +16,7 @@ namespace Kaddumi.UnityTools.ToolManager.Editor
 
         private Vector2 _scroll;
         private string _search = string.Empty;
+        private readonly Dictionary<string, bool> _settingsFoldouts = new Dictionary<string, bool>();
 
         [MenuItem("Tools/Unity Tools/Tool Manager")]
         public static void ShowWindow()
@@ -139,6 +140,33 @@ namespace Kaddumi.UnityTools.ToolManager.Editor
             {
                 var descStyle = new GUIStyle(EditorStyles.miniLabel) { wordWrap = true };
                 EditorGUILayout.LabelField(module.Description, descStyle);
+            }
+
+            if (module is IHasEditorToolSettings settingsModule)
+            {
+                if (!_settingsFoldouts.TryGetValue(module.Id, out bool isExpanded))
+                    isExpanded = false;
+
+                EditorGUILayout.Space(2);
+                isExpanded = EditorGUILayout.Foldout(isExpanded, "Settings", true);
+                _settingsFoldouts[module.Id] = isExpanded;
+
+                if (isExpanded)
+                {
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                    
+                    EditorGUI.BeginChangeCheck();
+                    settingsModule.DrawSettings();
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        // Save changes if necessary
+                        EditorUtility.SetDirty(this);
+                    }
+                    
+                    EditorGUILayout.EndVertical();
+                    EditorGUI.indentLevel--;
+                }
             }
 
             EditorGUILayout.EndVertical();

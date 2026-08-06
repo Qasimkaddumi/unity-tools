@@ -85,7 +85,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             foreach (var browser in browsers)
             {
                 if (browser.rootVisualElement == null) continue;
-
+                
                 var existingBar = browser.rootVisualElement.Q("ProjectNavBar");
                 if (existingBar == null)
                 {
@@ -128,35 +128,16 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
                             if (AssetDatabase.IsValidFolder(path))
                             {
                                 string guid = AssetDatabase.AssetPathToGUID(path);
-                                ProjectFolderData.instance.SetBookmark(guid, true);
+                                ProjectBookmarkData.instance.SetBookmark(guid, true);
                             }
                         }
                         RefreshAllBookmarks();
                         evt.StopPropagation();
                     });
 
-                    var customizeBtn = new Button(() => 
-                    {
-                        var active = Selection.activeObject;
-                        if (active != null)
-                        {
-                            string path = AssetDatabase.GetAssetPath(active);
-                            if (AssetDatabase.IsValidFolder(path))
-                            {
-                                string guid = AssetDatabase.AssetPathToGUID(path);
-                                var window = EditorWindow.GetWindow<FolderCustomizationPopup>(true, "Customize Folder", true);
-                                window.minSize = new Vector2(300, 420);
-                                // We need to make Init public or internal
-                                window.GetType().GetMethod("Init", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)?.Invoke(window, new object[] { guid });
-                            }
-                        }
-                    }) { text = "⚙ Customize" };
-                    customizeBtn.style.marginLeft = new StyleLength(StyleKeyword.Auto); // Push to the right
-                    
                     navBar.Add(backBtn);
                     navBar.Add(fwdBtn);
                     navBar.Add(bookmarksContainer);
-                    navBar.Add(customizeBtn);
 
                     activeBookmarkContainers.Add(bookmarksContainer);
                     RefreshBookmarks(bookmarksContainer);
@@ -179,7 +160,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
         {
             bookmarksContainer.Clear();
             
-            var data = ProjectFolderData.instance.folderConfigs;
+            var data = ProjectBookmarkData.instance.folderConfigs;
             var bookmarks = data.Where(x => x.isBookmarked).ToList();
             
             if (bookmarks.Count == 0)
@@ -228,7 +209,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
                         GenericMenu menu = new GenericMenu();
                         menu.AddItem(new GUIContent("Remove Bookmark"), false, () => 
                         {
-                            ProjectFolderData.instance.SetBookmark(config.guid, false);
+                            ProjectBookmarkData.instance.SetBookmark(config.guid, false);
                             RefreshAllBookmarks();
                         });
                         menu.ShowAsContext();

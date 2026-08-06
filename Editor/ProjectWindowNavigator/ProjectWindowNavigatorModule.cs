@@ -1,25 +1,27 @@
 using Kaddumi.UnityTools.ToolManager.Editor;
 
+using UnityEditor;
+
 namespace Kaddumi.UnityTools.ProjectEnhancer
 {
-    public class ProjectWindowEnhancerModule : IEditorToolModule
+    public class ProjectWindowNavigatorModule : IEditorToolModule
     {
-        public string Id => "project-window-enhancer";
-        public string DisplayName => "Project Window Enhancer";
-        public string Description => "Custom folder icons, colors, minimal mode, and a navigation bar.";
+        public string Id => "project-window-navigator";
+        public string DisplayName => "Project Window Navigator";
+        public string Description => "Adds a navigation bar with back/forward history and folder bookmarks.";
         public string Category => "UI Enhancements";
         public bool DefaultEnabled => true;
 
         public void OnActivated()
         {
-            ProjectWindowEnhancer.Enable();
+            ProjectWindowHover.Enable();
             ProjectWindowNavigationBar.Enable();
             ProjectWindowShortcuts.Enable();
         }
 
         public void OnDeactivated()
         {
-            ProjectWindowEnhancer.Disable();
+            ProjectWindowHover.Disable();
             ProjectWindowNavigationBar.Disable();
             ProjectWindowShortcuts.Disable();
         }
