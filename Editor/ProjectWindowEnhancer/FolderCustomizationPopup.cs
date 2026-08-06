@@ -10,6 +10,8 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
 
         private Color selectedColor = Color.clear;
         private string selectedIconName = "";
+        private string selectedCustomIconGuid = "";
+        private Texture2D selectedCustomIconTexture = null;
 
         // Built-in icon names for folders
         private readonly string[] builtinIcons = new string[]
@@ -48,8 +50,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             string guid = AssetDatabase.AssetPathToGUID(path);
 
             var window = GetWindow<FolderCustomizationPopup>(true, "Customize Folder", true);
-            window.minSize = new Vector2(250, 320);
-            window.maxSize = new Vector2(250, 320);
+            window.minSize = new Vector2(300, 420);
             window.Init(guid);
         }
 
@@ -62,11 +63,20 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             {
                 selectedColor = config.color;
                 selectedIconName = config.iconName;
+                selectedCustomIconGuid = config.customIconGuid ?? "";
+                if (!string.IsNullOrEmpty(selectedCustomIconGuid))
+                {
+                    string p = AssetDatabase.GUIDToAssetPath(selectedCustomIconGuid);
+                    if (!string.IsNullOrEmpty(p))
+                        selectedCustomIconTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(p);
+                }
             }
             else
             {
                 selectedColor = Color.clear;
                 selectedIconName = "";
+                selectedCustomIconGuid = "";
+                selectedCustomIconTexture = null;
             }
         }
 
@@ -128,14 +138,28 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
 
             EditorGUILayout.Space();
             
-            selectedIconName = EditorGUILayout.TextField("Custom Icon Name", selectedIconName);
+            selectedIconName = EditorGUILayout.TextField("Built-in Icon Name", selectedIconName);
+            
+            EditorGUILayout.Space();
+            GUILayout.Label("Or select a custom texture:", EditorStyles.boldLabel);
+            selectedCustomIconTexture = (Texture2D)EditorGUILayout.ObjectField("Project Icon", selectedCustomIconTexture, typeof(Texture2D), false);
+            
+            if (selectedCustomIconTexture != null)
+            {
+                string p = AssetDatabase.GetAssetPath(selectedCustomIconTexture);
+                selectedCustomIconGuid = AssetDatabase.AssetPathToGUID(p);
+            }
+            else
+            {
+                selectedCustomIconGuid = "";
+            }
 
             GUILayout.FlexibleSpace();
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Save"))
             {
-                ProjectFolderData.instance.SetConfig(targetGuid, selectedColor, selectedIconName);
+                ProjectFolderData.instance.SetConfig(targetGuid, selectedColor, selectedIconName, selectedCustomIconGuid);
                 EditorApplication.RepaintProjectWindow();
                 Close();
             }

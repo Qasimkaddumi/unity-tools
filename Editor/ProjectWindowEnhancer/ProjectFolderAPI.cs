@@ -12,30 +12,30 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             var config = ProjectFolderData.instance.GetConfig(guid);
             if (config != null)
             {
-                ProjectFolderData.instance.SetConfig(guid, color, config.iconName);
+                ProjectFolderData.instance.SetConfig(guid, color, config.iconName, config.customIconGuid);
             }
             else
             {
-                ProjectFolderData.instance.SetConfig(guid, color, "");
+                ProjectFolderData.instance.SetConfig(guid, color, "", "");
             }
         }
         
-        public static void SetFolderIcon(string guid, string iconName)
+        public static void SetFolderIcon(string guid, string iconName, string customIconGuid = "")
         {
             var config = ProjectFolderData.instance.GetConfig(guid);
             if (config != null)
             {
-                ProjectFolderData.instance.SetConfig(guid, config.color, iconName);
+                ProjectFolderData.instance.SetConfig(guid, config.color, iconName, customIconGuid);
             }
             else
             {
-                ProjectFolderData.instance.SetConfig(guid, Color.clear, iconName);
+                ProjectFolderData.instance.SetConfig(guid, Color.clear, iconName, customIconGuid);
             }
         }
         
-        public static void SetFolderCustomization(string guid, Color color, string iconName)
+        public static void SetFolderCustomization(string guid, Color color, string iconName, string customIconGuid = "")
         {
-            ProjectFolderData.instance.SetConfig(guid, color, iconName);
+            ProjectFolderData.instance.SetConfig(guid, color, iconName, customIconGuid);
         }
         
         public static void ClearFolderCustomization(string guid)

@@ -11,6 +11,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
         public string guid;
         public Color color = Color.clear;
         public string iconName = "";
+        public string customIconGuid = "";
         public bool isBookmarked = false;
     }
 
@@ -29,7 +30,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             return folderConfigs.Find(x => x.guid == guid);
         }
 
-        public void SetConfig(string guid, Color color, string iconName)
+        public void SetConfig(string guid, Color color, string iconName, string customIconGuid = "")
         {
             var config = GetConfig(guid);
             if (config == null)
@@ -39,6 +40,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             }
             config.color = color;
             config.iconName = iconName;
+            config.customIconGuid = customIconGuid;
             Save();
         }
 

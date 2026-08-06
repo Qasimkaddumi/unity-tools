@@ -37,9 +37,20 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
 
             var config = data.GetConfig(guid);
             string customIconName = config != null ? config.iconName : null;
+            string customIconGuid = config != null ? config.customIconGuid : null;
+            Texture2D loadedCustomIcon = null;
+
+            if (!string.IsNullOrEmpty(customIconGuid))
+            {
+                string iconPath = AssetDatabase.GUIDToAssetPath(customIconGuid);
+                if (!string.IsNullOrEmpty(iconPath))
+                {
+                    loadedCustomIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(iconPath);
+                }
+            }
             
             // Automatic Icons
-            if (settings.enableAutomaticIcons && string.IsNullOrEmpty(customIconName))
+            if (settings.enableAutomaticIcons && string.IsNullOrEmpty(customIconName) && loadedCustomIcon == null)
             {
                 FolderContentCache.UpdateCacheForFolder(guid, path);
                 var contents = FolderContentCache.GetFolderContents(guid);
@@ -57,7 +68,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             }
 
             bool hasCustomColor = settings.enableCustomColors && config != null && config.color != Color.clear;
-            bool hasCustomIcon = settings.enableCustomIcons && !string.IsNullOrEmpty(customIconName);
+            bool hasCustomIcon = (settings.enableCustomIcons && !string.IsNullOrEmpty(customIconName)) || loadedCustomIcon != null;
 
             if (hasCustomColor || hasCustomIcon || settings.enableMinimalMode)
             {
@@ -114,7 +125,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
                     // Draw small overlay icon on bottom-left
                     if (hasCustomIcon)
                     {
-                        Texture2D overlayIcon = EditorGUIUtility.IconContent(customIconName)?.image as Texture2D;
+                        Texture2D overlayIcon = loadedCustomIcon != null ? loadedCustomIcon : EditorGUIUtility.IconContent(customIconName)?.image as Texture2D;
                         if (overlayIcon != null)
                         {
                             Rect overlayRect;

@@ -145,8 +145,7 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
                             {
                                 string guid = AssetDatabase.AssetPathToGUID(path);
                                 var window = EditorWindow.GetWindow<FolderCustomizationPopup>(true, "Customize Folder", true);
-                                window.minSize = new Vector2(250, 320);
-                                window.maxSize = new Vector2(250, 320);
+                                window.minSize = new Vector2(300, 420);
                                 // We need to make Init public or internal
                                 window.GetType().GetMethod("Init", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)?.Invoke(window, new object[] { guid });
                             }
