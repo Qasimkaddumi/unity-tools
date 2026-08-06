@@ -6,7 +6,6 @@ using System.Linq;
 
 namespace Kaddumi.UnityTools.ProjectEnhancer
 {
-    [InitializeOnLoad]
     public static class ProjectWindowNavigationBar
     {
         private static List<string> history = new List<string>();
@@ -15,10 +14,38 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
         
         private static List<VisualElement> activeBookmarkContainers = new List<VisualElement>();
 
-        static ProjectWindowNavigationBar()
+        public static void Enable()
         {
+            EditorApplication.update -= InjectNavBar;
             EditorApplication.update += InjectNavBar;
+            Selection.selectionChanged -= OnSelectionChanged;
             Selection.selectionChanged += OnSelectionChanged;
+        }
+
+        public static void Disable()
+        {
+            EditorApplication.update -= InjectNavBar;
+            Selection.selectionChanged -= OnSelectionChanged;
+            RemoveNavBar();
+        }
+
+        private static void RemoveNavBar()
+        {
+            var projectBrowserType = typeof(EditorWindow).Assembly.GetType("UnityEditor.ProjectBrowser");
+            if (projectBrowserType == null) return;
+
+            var browsers = Resources.FindObjectsOfTypeAll(projectBrowserType) as EditorWindow[];
+            
+            foreach (var browser in browsers)
+            {
+                if (browser.rootVisualElement == null) continue;
+                var existingBar = browser.rootVisualElement.Q("ProjectNavBar");
+                if (existingBar != null)
+                {
+                    browser.rootVisualElement.Remove(existingBar);
+                }
+            }
+            activeBookmarkContainers.Clear();
         }
 
         private static void OnSelectionChanged()

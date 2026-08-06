@@ -5,12 +5,17 @@ using System.Linq;
 
 namespace Kaddumi.UnityTools.ProjectEnhancer
 {
-    [InitializeOnLoad]
     public static class ProjectWindowEnhancer
     {
-        static ProjectWindowEnhancer()
+        public static void Enable()
         {
+            EditorApplication.projectWindowItemOnGUI -= OnProjectWindowItemGUI;
             EditorApplication.projectWindowItemOnGUI += OnProjectWindowItemGUI;
+        }
+
+        public static void Disable()
+        {
+            EditorApplication.projectWindowItemOnGUI -= OnProjectWindowItemGUI;
         }
 
         private static void OnProjectWindowItemGUI(string guid, Rect selectionRect)

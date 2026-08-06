@@ -5,12 +5,17 @@ using System.Collections.Generic;
 
 namespace Kaddumi.UnityTools.ProjectEnhancer
 {
-    [InitializeOnLoad]
     public static class ProjectWindowShortcuts
     {
-        static ProjectWindowShortcuts()
+        public static void Enable()
         {
+            EditorApplication.projectWindowItemOnGUI -= OnProjectWindowItemGUI;
             EditorApplication.projectWindowItemOnGUI += OnProjectWindowItemGUI;
+        }
+
+        public static void Disable()
+        {
+            EditorApplication.projectWindowItemOnGUI -= OnProjectWindowItemGUI;
         }
 
         private static void OnProjectWindowItemGUI(string guid, Rect selectionRect)
