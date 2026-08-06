@@ -32,7 +32,6 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
             EditorGUILayout.LabelField("Customization", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(serializedSettings.FindProperty("enableCustomIcons"), new GUIContent("Enable Custom Icons"));
             EditorGUILayout.PropertyField(serializedSettings.FindProperty("enableCustomColors"), new GUIContent("Enable Custom Colors"));
-            EditorGUILayout.PropertyField(serializedSettings.FindProperty("enableAutomaticIcons"), new GUIContent("Enable Automatic Icons"));
 
             if (EditorGUI.EndChangeCheck())
             {

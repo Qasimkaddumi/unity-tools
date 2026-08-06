@@ -8,7 +8,6 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
     {
         public bool enableCustomIcons = true;
         public bool enableCustomColors = true;
-        public bool enableAutomaticIcons = true;
         public bool enableMinimalMode = false;
 
         public void Save()

@@ -48,24 +48,6 @@ namespace Kaddumi.UnityTools.ProjectEnhancer
                     loadedCustomIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(iconPath);
                 }
             }
-            
-            // Automatic Icons
-            if (settings.enableAutomaticIcons && string.IsNullOrEmpty(customIconName) && loadedCustomIcon == null)
-            {
-                FolderContentCache.UpdateCacheForFolder(guid, path);
-                var contents = FolderContentCache.GetFolderContents(guid);
-                if (contents != null && contents.Count == 1)
-                {
-                    var type = contents.First();
-                    if (type == typeof(UnityEditor.MonoScript)) customIconName = "cs Script Icon";
-                    else if (type == typeof(Material)) customIconName = "Material Icon";
-                    else if (type == typeof(GameObject)) customIconName = "Prefab Icon";
-                    else if (type == typeof(Texture2D)) customIconName = "Texture Icon";
-                    else if (type == typeof(AudioClip)) customIconName = "AudioClip Icon";
-                    else if (type == typeof(AnimationClip)) customIconName = "AnimationClip Icon";
-                    else if (type == typeof(SceneAsset)) customIconName = "SceneAsset Icon";
-                }
-            }
 
             bool hasCustomColor = settings.enableCustomColors && config != null && config.color != Color.clear;
             bool hasCustomIcon = (settings.enableCustomIcons && !string.IsNullOrEmpty(customIconName)) || loadedCustomIcon != null;
