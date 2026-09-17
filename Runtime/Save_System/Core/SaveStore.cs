@@ -29,16 +29,42 @@ namespace Kaddumi.UnityTools.Save.Core
         /// </summary>
         public bool IncludeInAutoSave { get; }
 
-        public SaveStore(string id, ISaveProvider provider, bool required = true, bool includeInAutoSave = true)
+        /// <summary>
+        /// Id of the store this one mirrors, or null for an ordinary store. A mirror holds a
+        /// copy of its primary's data: it receives the same saveables on every save, is
+        /// skipped on load (the primary is authoritative, with the mirror as fallback when
+        /// the primary can't be reached), and is reconciled by <c>SaveService.Sync</c>.
+        ///
+        /// <para>This is how a cloud store survives being offline: pair it with a local file
+        /// mirror. Saves always land in the mirror, the cloud write is allowed to fail
+        /// (<see cref="Required"/> off), and the next sync pushes whatever the cloud missed.</para>
+        /// </summary>
+        public string MirrorOf { get; }
+
+        /// <summary>True when this store mirrors another rather than standing on its own.</summary>
+        public bool IsMirror => MirrorOf != null;
+
+        public SaveStore(string id, ISaveProvider provider, bool required = true,
+            bool includeInAutoSave = true, string mirrorOf = null)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Store id must not be empty.", nameof(id));
             Id = id.Trim();
             Provider = provider ?? throw new ArgumentNullException(nameof(provider));
             Required = required;
             IncludeInAutoSave = includeInAutoSave;
+            MirrorOf = string.IsNullOrWhiteSpace(mirrorOf) ? null : mirrorOf.Trim();
+
+            if (MirrorOf != null && string.Equals(MirrorOf, Id, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException($"Store '{Id}' cannot mirror itself.", nameof(mirrorOf));
+            }
         }
 
-        public override string ToString() =>
-            $"{Id} ({Provider.GetType().Name}{(Required ? string.Empty : ", optional")})";
+        public override string ToString()
+        {
+            string notes = Required ? string.Empty : ", optional";
+            if (IsMirror) notes += $", mirror of {MirrorOf}";
+            return $"{Id} ({Provider.GetType().Name}{notes})";
+        }
     }
 }

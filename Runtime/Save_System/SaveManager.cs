@@ -56,6 +56,12 @@ namespace Kaddumi.UnityTools.Save
         /// <summary>Raised when any save/load operation fails.</summary>
         public event Action<SaveError> OnError;
 
+        /// <summary>
+        /// Raised when a sync finds a slot changed on both sides, before the policy settles
+        /// it. Hook this to tell the player their cloud save and local save diverged.
+        /// </summary>
+        public event Action<SaveConflict> OnConflict;
+
         // Saveables that registered before Initialize created the Service.
         private readonly List<ISaveable> _pending = new List<ISaveable>();
 
@@ -85,6 +91,9 @@ namespace Kaddumi.UnityTools.Save
             Service.OnSaved += slot => OnSaved?.Invoke(slot);
             Service.OnLoaded += slot => OnLoaded?.Invoke(slot);
             Service.OnError += error => OnError?.Invoke(error);
+            Service.OnConflict += conflict => OnConflict?.Invoke(conflict);
+
+            if (config != null) Service.ConflictPolicy = config.ConflictPolicy;
 
             ActiveSlot = config != null ? config.DefaultSlot : 0;
 
@@ -115,6 +124,19 @@ namespace Kaddumi.UnityTools.Save
                     StartAutoSaveIfEnabled();
                     Debug.Log($"[SaveManager] Initialized with {created.Count} store(s): " +
                               $"{string.Join(", ", created)}");
+
+                    // Reconcile before reporting ready, so whatever loads next sees the
+                    // winning save rather than a stale mirror.
+                    if (config != null && config.SyncOnInitialize)
+                    {
+                        Service.SyncAll(ActiveSlot, applyToLiveObjects: true, results =>
+                        {
+                            LogSyncResults(results);
+                            onComplete?.Invoke();
+                        });
+                        return;
+                    }
+
                     onComplete?.Invoke();
                 });
             }
@@ -155,9 +177,28 @@ namespace Kaddumi.UnityTools.Save
                 }
 
                 created.Add(Service.RegisterStore(binding.Id, binding.Provider.CreateProvider(),
-                    binding.Required, binding.IncludeInAutoSave));
+                    binding.Required, binding.IncludeInAutoSave, binding.MirrorOf));
             }
+
+            WarnAboutDanglingMirrors();
             return created;
+        }
+
+        /// <summary>
+        /// A mirror pointing at a store that isn't bound would silently never sync and never
+        /// receive a copy, which is a miserable thing to debug at runtime.
+        /// </summary>
+        private void WarnAboutDanglingMirrors()
+        {
+            foreach (SaveStore store in Service.Stores)
+            {
+                if (store.IsMirror && !Service.HasStore(store.MirrorOf))
+                {
+                    Debug.LogWarning($"[SaveManager] Store '{store.Id}' is set to mirror " +
+                                     $"'{store.MirrorOf}', which is not bound. It will receive no data " +
+                                     "and never sync. Fix the 'Mirror Of' id or add that store.");
+                }
+            }
         }
 
         private void CacheAutoSaveStores()
@@ -213,7 +254,7 @@ namespace Kaddumi.UnityTools.Save
         public void Save(int slot, Action<SaveReport> onComplete = null)
         {
             if (!ValidateSlot(slot, onComplete)) return;
-            Service.Save(slot, WrapLog(onComplete));
+            Service.Save(slot, WrapSave(slot, onComplete));
         }
 
         /// <summary>
@@ -226,7 +267,7 @@ namespace Kaddumi.UnityTools.Save
         public void SaveTo(int slot, string storeId, Action<SaveReport> onComplete = null)
         {
             if (!ValidateSlot(slot, onComplete)) return;
-            Service.SaveTo(slot, storeId, WrapLog(onComplete));
+            Service.SaveTo(slot, storeId, WrapSave(slot, onComplete));
         }
 
         /// <summary>Loads and applies the <see cref="ActiveSlot"/> from every bound store.</summary>
@@ -277,6 +318,179 @@ namespace Kaddumi.UnityTools.Save
         public void GetMetadata(int slot, string storeId, Action<SaveMetadata> onComplete) =>
             Service?.GetMetadata(slot, storeId, onComplete);
 
+        // --- Sync -------------------------------------------------------------
+
+        /// <summary>
+        /// Reconciles every mirror pair for the <see cref="ActiveSlot"/> — the "sync now"
+        /// call. Run it after sign-in, when connectivity returns, or from a menu button.
+        /// </summary>
+        public void Sync(Action<SaveSyncResult[]> onComplete = null) =>
+            Sync(ActiveSlot, applyToLiveObjects: true, onComplete);
+
+        /// <param name="applyToLiveObjects">
+        /// Whether a save copied onto a primary store is applied to the live objects. Leave
+        /// it true at startup;
+        /// pass false for a mid-session background sync, so the player's state isn't
+        /// replaced underneath them.
+        /// </param>
+        public void Sync(int slot, bool applyToLiveObjects = true, Action<SaveSyncResult[]> onComplete = null)
+        {
+            if (Service == null)
+            {
+                onComplete?.Invoke(Array.Empty<SaveSyncResult>());
+                return;
+            }
+
+            Service.SyncAll(slot, applyToLiveObjects, results =>
+            {
+                LogSyncResults(results);
+                onComplete?.Invoke(results);
+            });
+        }
+
+        /// <summary>Reconciles one specific pair, for cases the declared mirrors don't cover.</summary>
+        public void Sync(int slot, string primaryStoreId, string mirrorStoreId,
+            bool applyToLiveObjects = true, Action<SaveSyncResult> onComplete = null) =>
+            Service?.Sync(slot, primaryStoreId, mirrorStoreId, applyToLiveObjects, onComplete);
+
+        /// <summary>
+        /// How conflicts are settled. Initialized from <see cref="SaveConfig"/>; set it at
+        /// runtime to carry out a player's choice — <see cref="SaveConflictPolicy.PreferMirror"/>
+        /// for "keep the cloud save", then call <see cref="Sync(Action{SaveSyncResult[]})"/> again.
+        /// </summary>
+        public SaveConflictPolicy ConflictPolicy
+        {
+            get => Service != null ? Service.ConflictPolicy : SaveConflictPolicy.NewestWins;
+            set { if (Service != null) Service.ConflictPolicy = value; }
+        }
+
+        /// <summary>Resolver consulted when <see cref="ConflictPolicy"/> is Manual.</summary>
+        public Func<SaveConflict, SaveSyncDirection> ConflictResolver
+        {
+            get => Service?.ConflictResolver;
+            set { if (Service != null) Service.ConflictResolver = value; }
+        }
+
+        private static void LogSyncResults(SaveSyncResult[] results)
+        {
+            if (results == null) return;
+            foreach (SaveSyncResult result in results)
+            {
+                if (!result.Success) Debug.LogWarning($"[SaveManager] Sync failed: {result}");
+                else if (result.Status != SaveSyncStatus.InSync && result.Status != SaveSyncStatus.NoData)
+                {
+                    Debug.Log($"[SaveManager] Sync: {result}");
+                }
+            }
+        }
+
+        // --- Blobs ------------------------------------------------------------
+
+        /// <summary>
+        /// Stores raw bytes — a screenshot, a thumbnail — alongside a slot, in one store of
+        /// your choosing. Blobs are written when you ask, not captured on every save, and
+        /// are deleted along with their slot.
+        /// </summary>
+        /// <param name="name">Blob name, unique within the slot, e.g. "screenshot".</param>
+        /// <param name="storeId">Store to write to; null uses the default store.</param>
+        public void SaveBlob(int slot, string name, byte[] bytes, string storeId = null,
+            Action<SaveResult> onComplete = null) =>
+            Service?.SaveBlob(slot, name, bytes, storeId, onComplete);
+
+        /// <summary>Reads a blob back as raw bytes.</summary>
+        public void LoadBlob(int slot, string name, string storeId = null,
+            Action<SaveBlobResult> onComplete = null) =>
+            Service?.LoadBlob(slot, name, storeId, onComplete);
+
+        public void DeleteBlob(int slot, string name, string storeId = null,
+            Action<SaveResult> onComplete = null) =>
+            Service?.DeleteBlob(slot, name, storeId, onComplete);
+
+        public void HasBlob(int slot, string name, string storeId = null, Action<bool> onComplete = null) =>
+            Service?.HasBlob(slot, name, storeId, onComplete);
+
+        /// <summary>Names of the blobs a slot holds in a store, without reading their bytes.</summary>
+        public void ListBlobs(int slot, string storeId = null, Action<string[]> onComplete = null) =>
+            Service?.ListBlobs(slot, storeId, onComplete);
+
+        /// <summary>
+        /// Captures the screen at the end of this frame and stores it as a PNG blob — the
+        /// save-slot thumbnail case, done correctly. Must be called from a coroutine-capable
+        /// context; it waits for rendering to finish before reading the framebuffer.
+        /// </summary>
+        /// <param name="superSize">Resolution multiplier; 1 is the current screen size.</param>
+        public void CaptureScreenshot(int slot, string name = "screenshot", string storeId = null,
+            int superSize = 1, Action<SaveResult> onComplete = null)
+        {
+            if (Service == null)
+            {
+                onComplete?.Invoke(SaveResult.Fail(SaveErrorType.NotInitialized,
+                    "SaveManager is not initialized yet."));
+                return;
+            }
+            StartCoroutine(CaptureScreenshotRoutine(slot, name, storeId, Mathf.Max(1, superSize), onComplete));
+        }
+
+        private IEnumerator CaptureScreenshotRoutine(int slot, string name, string storeId,
+            int superSize, Action<SaveResult> onComplete)
+        {
+            // ScreenCapture reads the framebuffer, which is only complete once every camera
+            // and UI pass for the frame has run.
+            yield return new WaitForEndOfFrame();
+
+            byte[] png;
+            try
+            {
+                Texture2D shot = ScreenCapture.CaptureScreenshotAsTexture(superSize);
+                png = shot.EncodeToPNG();
+                Destroy(shot);
+            }
+            catch (Exception e)
+            {
+                onComplete?.Invoke(SaveResult.Fail(SaveErrorType.Io,
+                    $"Could not capture a screenshot: {e.Message}"));
+                yield break;
+            }
+
+            Service.SaveBlob(slot, name, png, storeId, onComplete);
+        }
+
+        /// <summary>
+        /// Reads an image blob back as a <see cref="Texture2D"/> ready to show in UI, or null
+        /// when there is none. Handles the decode; the caller owns the texture and should
+        /// <c>Destroy</c> it when the screen closes.
+        /// </summary>
+        public void LoadTexture(int slot, string name = "screenshot", string storeId = null,
+            Action<Texture2D> onComplete = null)
+        {
+            if (Service == null)
+            {
+                onComplete?.Invoke(null);
+                return;
+            }
+
+            Service.LoadBlob(slot, name, storeId, result =>
+            {
+                if (!result.Success || result.Length == 0)
+                {
+                    onComplete?.Invoke(null);
+                    return;
+                }
+
+                // Size and format are replaced by LoadImage; these are just placeholders.
+                var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (texture.LoadImage(result.Data))
+                {
+                    onComplete?.Invoke(texture);
+                    return;
+                }
+
+                Destroy(texture);
+                Debug.LogWarning($"[SaveManager] Blob '{name}' in slot {slot} is not a readable image.");
+                onComplete?.Invoke(null);
+            });
+        }
+
         /// <summary>Sets the slot targeted by the parameterless <see cref="Save()"/>/<see cref="Load()"/>.</summary>
         public void SetActiveSlot(int slot)
         {
@@ -312,7 +526,7 @@ namespace Kaddumi.UnityTools.Save
         {
             int slot = config.DefaultSlot;
             if (!ValidateSlot(slot, null)) return;
-            Service.Save(slot, _autoSaveStoreIds, WrapLog(null));
+            Service.Save(slot, _autoSaveStoreIds, WrapSave(slot, null));
         }
 
         private void OnApplicationPause(bool paused)
@@ -372,6 +586,23 @@ namespace Kaddumi.UnityTools.Save
                               $"failures: {report}");
                 }
                 inner?.Invoke(report);
+            };
+        }
+
+        /// <summary>
+        /// Wraps a save callback so a successful write is followed by a mirror reconcile.
+        /// applyToLiveObjects is false here: this runs mid-session, and a background sync must
+        /// never replace live objects out from under the player.
+        /// </summary>
+        private Action<SaveReport> WrapSave(int slot, Action<SaveReport> inner)
+        {
+            Action<SaveReport> logged = WrapLog(inner);
+            if (config == null || !config.SyncAfterSave) return logged;
+
+            return report =>
+            {
+                logged(report);
+                if (report.Success) Service.SyncAll(slot, applyToLiveObjects: false, LogSyncResults);
             };
         }
 

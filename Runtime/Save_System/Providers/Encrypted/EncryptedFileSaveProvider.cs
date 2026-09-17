@@ -14,6 +14,10 @@ namespace Kaddumi.UnityTools.Save.Providers
     /// This deters casual save-file tampering; it is not a defense against a determined
     /// attacker who can read the app binary (the password ships inside it). For that,
     /// derive the password from a server-issued or per-device secret.
+    ///
+    /// <para>Because the hooks it overrides are byte-to-byte, binary blobs — screenshots
+    /// and the like — are encrypted on the same terms as slot payloads, with no extra
+    /// work from the caller.</para>
     /// </summary>
     public class EncryptedFileSaveProvider : FileSaveProvider
     {
@@ -37,8 +41,10 @@ namespace Kaddumi.UnityTools.Save.Providers
             passwordBytes = Encoding.UTF8.GetBytes(password);
         }
 
-        protected override byte[] Encode(string data)
+        protected override byte[] EncodeBytes(byte[] plain)
         {
+            plain = plain ?? Array.Empty<byte>();
+
             byte[] salt = RandomBytes(SaltSize);
             byte[] iv = RandomBytes(IvSize);
 
@@ -48,7 +54,6 @@ namespace Kaddumi.UnityTools.Save.Providers
                 aes.Key = kdf.GetBytes(KeySize);
                 aes.IV = iv;
 
-                byte[] plain = Encoding.UTF8.GetBytes(data);
                 using (var encryptor = aes.CreateEncryptor())
                 {
                     byte[] cipher = encryptor.TransformFinalBlock(plain, 0, plain.Length);
@@ -63,7 +68,7 @@ namespace Kaddumi.UnityTools.Save.Providers
             }
         }
 
-        protected override string Decode(byte[] bytes)
+        protected override byte[] DecodeBytes(byte[] bytes)
         {
             if (bytes == null || bytes.Length < SaltSize + IvSize)
             {
@@ -88,8 +93,7 @@ namespace Kaddumi.UnityTools.Save.Providers
                 {
                     // A wrong password / tampered file throws CryptographicException here,
                     // which FileSaveProvider.Read surfaces as SaveErrorType.Corrupted.
-                    byte[] plain = decryptor.TransformFinalBlock(cipher, 0, cipher.Length);
-                    return Encoding.UTF8.GetString(plain);
+                    return decryptor.TransformFinalBlock(cipher, 0, cipher.Length);
                 }
             }
         }

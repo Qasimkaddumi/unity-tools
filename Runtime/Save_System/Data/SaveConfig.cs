@@ -1,3 +1,4 @@
+using Kaddumi.UnityTools.Save.Core;
 using UnityEngine;
 
 namespace Kaddumi.UnityTools.Save.Data
@@ -42,5 +43,22 @@ namespace Kaddumi.UnityTools.Save.Data
         [Header("Playtime")]
         [Tooltip("Accumulate elapsed play time and store it in each save's metadata.")]
         public bool TrackPlaytime = true;
+
+        [Header("Sync")]
+        [Tooltip("Reconcile every mirror pair once the save system finishes initializing. " +
+                 "This is what pushes saves a previous offline session couldn't deliver, and " +
+                 "pulls progress made on another device.")]
+        public bool SyncOnInitialize = true;
+
+        [Tooltip("After a successful save, reconcile the mirror pairs in the background. Keeps a " +
+                 "cloud store current without waiting for the next launch; costs a request per save.")]
+        public bool SyncAfterSave = false;
+
+        [Tooltip("How to settle a slot that changed on BOTH sides since they last agreed.\n\n" +
+                 "Newest Wins: later timestamp (the usual choice).\n" +
+                 "Most Playtime: more accumulated play time — better when device clocks can't be trusted.\n" +
+                 "Prefer Primary / Prefer Mirror: always one side.\n" +
+                 "Manual: ask SaveService.ConflictResolver, e.g. to show the player a dialog.")]
+        public SaveConflictPolicy ConflictPolicy = SaveConflictPolicy.NewestWins;
     }
 }

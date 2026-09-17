@@ -1,3 +1,4 @@
+using Kaddumi.UnityTools.Save.Core;
 using Kaddumi.UnityTools.Save.Data;
 using UnityEditor;
 using UnityEngine;
@@ -12,6 +13,7 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
         private SerializedProperty _autoSave, _autoSaveInterval;
         private SerializedProperty _saveOnQuit, _saveOnPause;
         private SerializedProperty _trackPlaytime;
+        private SerializedProperty _syncOnInitialize, _syncAfterSave, _conflictPolicy;
 
         private void OnEnable()
         {
@@ -24,6 +26,9 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
             _saveOnQuit = serializedObject.FindProperty(nameof(SaveConfig.SaveOnQuit));
             _saveOnPause = serializedObject.FindProperty(nameof(SaveConfig.SaveOnPause));
             _trackPlaytime = serializedObject.FindProperty(nameof(SaveConfig.TrackPlaytime));
+            _syncOnInitialize = serializedObject.FindProperty(nameof(SaveConfig.SyncOnInitialize));
+            _syncAfterSave = serializedObject.FindProperty(nameof(SaveConfig.SyncAfterSave));
+            _conflictPolicy = serializedObject.FindProperty(nameof(SaveConfig.ConflictPolicy));
         }
 
         public override void OnInspectorGUI()
@@ -65,6 +70,26 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
                 EditorGUILayout.PropertyField(_saveOnQuit);
                 EditorGUILayout.PropertyField(_saveOnPause);
                 EditorGUILayout.PropertyField(_trackPlaytime);
+            }
+            EditorGUILayout.Space(6);
+
+            using (SOEditorKit.Box())
+            {
+                SOEditorKit.SectionHeader("Sync", "d_Refresh");
+                EditorGUILayout.PropertyField(_syncOnInitialize, new GUIContent("Sync On Start"));
+                EditorGUILayout.PropertyField(_syncAfterSave);
+                EditorGUILayout.PropertyField(_conflictPolicy);
+
+                if (_conflictPolicy.enumValueIndex == (int)SaveConflictPolicy.Manual)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Manual needs SaveManager.ConflictResolver assigned in code, or conflicts " +
+                        "fall back to newest-wins.", MessageType.Info);
+                }
+
+                EditorGUILayout.HelpBox(
+                    "Sync only does something when a store has its 'Mirror Of' set to another " +
+                    "store, on the SaveManager component.", MessageType.None);
             }
 
             serializedObject.ApplyModifiedProperties();

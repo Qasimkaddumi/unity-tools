@@ -29,5 +29,12 @@ namespace Kaddumi.UnityTools.Save.Data
         [Tooltip("Whether the periodic auto-save writes this store. Usually off for a cloud " +
                  "store, so a 60-second timer doesn't fire a network request every minute.")]
         public bool IncludeInAutoSave = true;
+
+        [Tooltip("Leave empty for a normal store. Set it to another store's id to make this one " +
+                 "a MIRROR of that store: it holds a copy of the same data, gets written on every " +
+                 "save, is skipped on load unless the primary can't be reached, and is reconciled " +
+                 "by Sync. Pair a cloud store with a local file mirror to make cloud saves work " +
+                 "offline.")]
+        public string MirrorOf = string.Empty;
     }
 }

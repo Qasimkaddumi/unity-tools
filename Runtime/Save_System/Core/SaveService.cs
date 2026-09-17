@@ -21,7 +21,7 @@ namespace Kaddumi.UnityTools.Save.Core
     /// name one that isn't bound) fall back to it. <c>SaveManager</c> is only the
     /// MonoBehaviour host that feeds this service its stores and config from the inspector.</para>
     /// </summary>
-    public class SaveService
+    public partial class SaveService
     {
         /// <summary>Which fan-out this is, so only saves and loads raise their events.</summary>
         private enum SaveOperation { Save, Load, Delete }
@@ -82,9 +82,9 @@ namespace Kaddumi.UnityTools.Save.Core
         }
 
         public SaveStore RegisterStore(string id, ISaveProvider provider, bool required = true,
-            bool includeInAutoSave = true)
+            bool includeInAutoSave = true, string mirrorOf = null)
         {
-            var store = new SaveStore(id, provider, required, includeInAutoSave);
+            var store = new SaveStore(id, provider, required, includeInAutoSave, mirrorOf);
             RegisterStore(store);
             return store;
         }
@@ -104,6 +104,25 @@ namespace Kaddumi.UnityTools.Save.Core
         {
             int index = IndexOfStore(id);
             return index >= 0 ? stores[index] : null;
+        }
+
+        /// <summary>
+        /// Stores that mirror <paramref name="storeId"/>. Usually none or one — a cloud store
+        /// with its local cache — but nothing stops a store having several.
+        /// </summary>
+        public List<SaveStore> MirrorsOf(string storeId)
+        {
+            var mirrors = new List<SaveStore>();
+            if (string.IsNullOrEmpty(storeId)) return mirrors;
+
+            foreach (SaveStore store in stores)
+            {
+                if (store.IsMirror && string.Equals(store.MirrorOf, storeId, StringComparison.OrdinalIgnoreCase))
+                {
+                    mirrors.Add(store);
+                }
+            }
+            return mirrors;
         }
 
         // --- Saveable registry ------------------------------------------------
@@ -145,7 +164,7 @@ namespace Kaddumi.UnityTools.Save.Core
         /// </summary>
         public void Save(int slot, IEnumerable<string> storeIds, Action<SaveReport> onComplete = null)
         {
-            if (!TryResolveTargets(storeIds, out List<SaveStore> targets, out SaveReport failure))
+            if (!TryResolveTargets(storeIds, includeMirrors: true, out List<SaveStore> targets, out SaveReport failure))
             {
                 Report(onComplete, failure);
                 return;
@@ -181,13 +200,17 @@ namespace Kaddumi.UnityTools.Save.Core
             Load(slot, new[] { storeId }, onComplete);
 
         /// <summary>
-        /// Reads the named stores (null targets them all) and restores each one's saveables.
-        /// Only saveables currently routed to a store are restored from it, so re-routing a
-        /// saveable leaves its old data behind rather than applying it twice.
+        /// Reads the named stores (null targets every non-mirror store) and restores each
+        /// one's saveables. Only saveables currently routed to a store are restored from it,
+        /// so re-routing a saveable leaves its old data behind rather than applying it twice.
+        ///
+        /// <para>When a store can't be read — an offline cloud backend, most often — its
+        /// mirrors are tried in turn before the load is called a failure. That is what makes
+        /// a mirrored cloud store playable on a plane.</para>
         /// </summary>
         public void Load(int slot, IEnumerable<string> storeIds, Action<SaveReport> onComplete = null)
         {
-            if (!TryResolveTargets(storeIds, out List<SaveStore> targets, out SaveReport failure))
+            if (!TryResolveTargets(storeIds, includeMirrors: false, out List<SaveStore> targets, out SaveReport failure))
             {
                 Report(onComplete, failure);
                 return;
@@ -197,45 +220,84 @@ namespace Kaddumi.UnityTools.Save.Core
 
             RunAcrossStores(targets, slot, SaveOperation.Load, onComplete, (store, done) =>
             {
-                store.Provider.Read(SlotKey(slot), result =>
-                {
-                    if (!result.Success)
-                    {
-                        done(SaveStoreOutcome.From(store, result));
-                        return;
-                    }
-
-                    SaveData data = serializer.Deserialize(result.Data);
-                    if (data == null)
-                    {
-                        done(SaveStoreOutcome.Fail(store, SaveErrorType.Corrupted,
-                            $"Save in slot {slot} (store '{store.Id}') could not be parsed."));
-                        return;
-                    }
-
-                    if (data.Metadata != null && data.Metadata.Version > Version)
-                    {
-                        done(SaveStoreOutcome.Fail(store, SaveErrorType.VersionMismatch,
-                            $"Save version {data.Metadata.Version} in store '{store.Id}' is newer than " +
-                            $"supported version {Version}."));
-                        return;
-                    }
-
-                    try
-                    {
-                        routed.TryGetValue(store.Id, out List<ISaveable> owned);
-                        Restore(data, owned);
-                    }
-                    catch (Exception e)
-                    {
-                        done(SaveStoreOutcome.Fail(store, SaveErrorType.Serialization,
-                            $"Failed to restore state from store '{store.Id}': {e.Message}"));
-                        return;
-                    }
-
-                    done(SaveStoreOutcome.Ok(store));
-                });
+                // An explicitly named store is read on its own; an unfiltered load lets a
+                // primary fall back to its mirrors.
+                List<SaveStore> chain = storeIds == null ? MirrorsOf(store.Id) : null;
+                LoadFromChain(slot, store, chain, 0, routed, done);
             });
+        }
+
+        /// <summary>
+        /// Reads <paramref name="store"/> and, if that fails, each fallback in turn. The
+        /// outcome reported is the first success, or — when every attempt fails — the
+        /// primary's error, since that is the one that describes what the caller asked for.
+        /// </summary>
+        private void LoadFromChain(int slot, SaveStore store, List<SaveStore> fallbacks, int attempt,
+            Dictionary<string, List<ISaveable>> routed, Action<SaveStoreOutcome> done)
+        {
+            SaveStore reading = attempt == 0 ? store : fallbacks[attempt - 1];
+
+            reading.Provider.Read(SlotKey(slot), result =>
+            {
+                SaveStoreOutcome outcome = ApplyLoadedPayload(slot, store, reading, result, routed);
+                if (outcome.Success)
+                {
+                    if (attempt > 0)
+                    {
+                        Debug.Log($"[SaveService] Store '{store.Id}' was unreachable for slot {slot}; " +
+                                  $"loaded from its mirror '{reading.Id}' instead.");
+                    }
+                    done(outcome);
+                    return;
+                }
+
+                bool haveFallbackLeft = fallbacks != null && attempt < fallbacks.Count;
+                if (haveFallbackLeft)
+                {
+                    LoadFromChain(slot, store, fallbacks, attempt + 1, routed, done);
+                    return;
+                }
+
+                done(outcome);
+            });
+        }
+
+        /// <summary>
+        /// Validates a payload read from <paramref name="reading"/> and restores the saveables
+        /// routed to <paramref name="store"/> — the two differ when a mirror stood in for its
+        /// primary, and the routing that matters is always the primary's.
+        /// </summary>
+        private SaveStoreOutcome ApplyLoadedPayload(int slot, SaveStore store, SaveStore reading,
+            SaveResult result, Dictionary<string, List<ISaveable>> routed)
+        {
+            if (!result.Success) return SaveStoreOutcome.From(store, result);
+
+            SaveData data = serializer.Deserialize(result.Data);
+            if (data == null)
+            {
+                return SaveStoreOutcome.Fail(store, SaveErrorType.Corrupted,
+                    $"Save in slot {slot} (store '{reading.Id}') could not be parsed.");
+            }
+
+            if (data.Metadata != null && data.Metadata.Version > Version)
+            {
+                return SaveStoreOutcome.Fail(store, SaveErrorType.VersionMismatch,
+                    $"Save version {data.Metadata.Version} in store '{reading.Id}' is newer than " +
+                    $"supported version {Version}.");
+            }
+
+            try
+            {
+                routed.TryGetValue(store.Id, out List<ISaveable> owned);
+                Restore(data, owned);
+            }
+            catch (Exception e)
+            {
+                return SaveStoreOutcome.Fail(store, SaveErrorType.Serialization,
+                    $"Failed to restore state from store '{reading.Id}': {e.Message}");
+            }
+
+            return SaveStoreOutcome.Ok(store);
         }
 
         /// <summary>Deletes the slot from every bound store.</summary>
@@ -251,7 +313,7 @@ namespace Kaddumi.UnityTools.Save.Core
         /// </summary>
         public void Delete(int slot, IEnumerable<string> storeIds, Action<SaveReport> onComplete = null)
         {
-            if (!TryResolveTargets(storeIds, out List<SaveStore> targets, out SaveReport failure))
+            if (!TryResolveTargets(storeIds, includeMirrors: true, out List<SaveStore> targets, out SaveReport failure))
             {
                 Report(onComplete, failure);
                 return;
@@ -262,7 +324,18 @@ namespace Kaddumi.UnityTools.Save.Core
                 store.Provider.Delete(SlotKey(slot), result =>
                 {
                     bool alreadyGone = !result.Success && result.Error.Type == SaveErrorType.NotFound;
-                    done(alreadyGone ? SaveStoreOutcome.Ok(store) : SaveStoreOutcome.From(store, result));
+                    SaveStoreOutcome outcome = alreadyGone
+                        ? SaveStoreOutcome.Ok(store)
+                        : SaveStoreOutcome.From(store, result);
+
+                    // Drop the sync token as well, or a slot that is deleted and started
+                    // over would be reconciled against an agreement that no longer exists.
+                    store.Provider.Delete(SyncTokenKey(slot), _ =>
+                    {
+                        // Sweep the slot's blobs too, so deleting a save can't strand its
+                        // screenshots. Their failures are logged, not fatal (see DeleteBlobsOf).
+                        DeleteBlobsOf(slot, store, () => done(outcome));
+                    });
                 });
             });
         }
@@ -374,8 +447,14 @@ namespace Kaddumi.UnityTools.Save.Core
         /// Fails when nothing is bound at all, or when a named store doesn't exist — a
         /// missing store is a wiring mistake, not something to silently skip.
         /// </summary>
-        private bool TryResolveTargets(IEnumerable<string> storeIds, out List<SaveStore> targets,
-            out SaveReport failure)
+        /// <param name="includeMirrors">
+        /// Whether an unfiltered operation covers mirror stores. True for writes and deletes,
+        /// which must keep a mirror in step; false for loads, where the primary is
+        /// authoritative and its mirrors are only consulted as a fallback. A store named
+        /// explicitly is always honoured, mirror or not.
+        /// </param>
+        private bool TryResolveTargets(IEnumerable<string> storeIds, bool includeMirrors,
+            out List<SaveStore> targets, out SaveReport failure)
         {
             failure = null;
 
@@ -389,7 +468,25 @@ namespace Kaddumi.UnityTools.Save.Core
 
             if (storeIds == null)
             {
-                targets = stores;
+                if (includeMirrors)
+                {
+                    targets = stores;
+                    return true;
+                }
+
+                targets = new List<SaveStore>();
+                foreach (SaveStore store in stores)
+                {
+                    if (!store.IsMirror) targets.Add(store);
+                }
+
+                if (targets.Count == 0)
+                {
+                    failure = SaveReport.Fail(SaveErrorType.ProviderNotAvailable,
+                        "Every registered store is a mirror, so there is no primary to read from. " +
+                        "Clear 'Mirror Of' on at least one store.");
+                    return false;
+                }
                 return true;
             }
 
@@ -438,16 +535,26 @@ namespace Kaddumi.UnityTools.Save.Core
                 else
                 {
                     SaveStore store = GetStore(requested);
-                    if (store != null)
-                    {
-                        resolved = store.Id;
-                    }
-                    else
+                    if (store == null)
                     {
                         resolved = DefaultStoreId;
                         Debug.LogWarning($"[SaveService] Saveable '{pair.Key}' wants store '{requested}', " +
                                          $"which is not registered. Falling back to '{resolved}'. " +
                                          "Bind that store in the SaveManager inspector.");
+                    }
+                    else if (store.IsMirror)
+                    {
+                        // Routing at a mirror would be overwritten by its primary's bucket
+                        // below, silently dropping this saveable. Point it at the primary,
+                        // which is what the author meant; the mirror still gets the copy.
+                        resolved = store.MirrorOf;
+                        Debug.LogWarning($"[SaveService] Saveable '{pair.Key}' targets store '{requested}', " +
+                                         $"which is a mirror of '{resolved}'. Routing it to '{resolved}' " +
+                                         "instead — the mirror receives a copy either way.");
+                    }
+                    else
+                    {
+                        resolved = store.Id;
                     }
                 }
 
@@ -457,6 +564,22 @@ namespace Kaddumi.UnityTools.Save.Core
                     routed[resolved] = bucket;
                 }
                 bucket.Add(pair.Value);
+            }
+
+            // A mirror carries a copy of its primary's data, so it inherits the same bucket.
+            // Done after the main loop so it doesn't matter which order the stores were bound in.
+            foreach (SaveStore store in stores)
+            {
+                if (!store.IsMirror) continue;
+
+                if (routed.TryGetValue(store.MirrorOf, out List<ISaveable> primaryBucket))
+                {
+                    routed[store.Id] = primaryBucket;
+                }
+                else
+                {
+                    routed.Remove(store.Id);
+                }
             }
             return routed;
         }
