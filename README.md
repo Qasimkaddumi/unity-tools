@@ -27,7 +27,7 @@ Most runtime systems follow the same pattern: a singleton **Manager** (`IService
 | Consent | `ConsentService/` | `ConsentService` gates personalized ads/analytics behind GDPR/CCPA consent (Google UMP or a built-in manual dialog). |
 | Loading | `LoadingSystem/` | `LoadingManager` drives scene transitions and loading-screen UI from a `SceneCatalog`. |
 | Audio | `Audio_System/` | `AudioManager` — pooled SFX, crossfaded music, mixer buses with ducking; plays `SoundDefinition` assets by reference or string ID. Includes a `GameAudioTrack`/`GameAudioClip` Timeline track (with ease/blend, clip-in, speed, loop, volume and a waveform preview) that routes sounds through the audio system instead of Timeline's built-in Audio Track. Drop a `VideoAudioRouter` next to a `VideoPlayer` to route a video's audio through any mixer bus, so bus volume, mute, and ducking apply to it too. |
-| Save | `Save_System/` | `SaveManager` persists `ISaveable` objects to PlayerPrefs, JSON file, encrypted file, or a remote API. |
+| Save | `Save_System/` | `SaveManager` persists `ISaveable` objects across several named stores at once — each saveable picks one via `StorageId`, so settings can sit in a local file while progression goes to a remote API. Backends: PlayerPrefs, JSON file, encrypted file, or cloud. |
 | Api | `Api_System/` | `ApiManager`/`ApiClient` — async HTTP client with auth-token handling, no coroutine host needed. |
 | Game Statistics | `Game_Statistics_System/` | `StatisticsManager` tracks per-player metrics (counters, FPS, per-run data) with debounced JSON persistence. |
 | Global Events | `GlobalEventsSystem/` | Static type-based pub/sub bus (`Listen<T>`/`Unlisten<T>`/`Raise<T>`). |

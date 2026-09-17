@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Kaddumi.UnityTools.Save.Core;
 using Kaddumi.UnityTools.Save.Interfaces;
 using UnityEngine;
 
@@ -25,6 +26,10 @@ namespace Kaddumi.UnityTools.Audio.Core
         }
 
         public string SaveKey => Key;
+
+        // Audio settings are a device preference, not player progression: they belong on
+        // this machine and shouldn't be pushed to (or pulled from) a cloud store.
+        public string StorageId => SaveStores.Local;
 
         public string CaptureState() => JsonUtility.ToJson(_capture());
 

@@ -10,7 +10,8 @@ namespace Kaddumi.UnityTools.Save.Core
         Corrupted,            // Stored data exists but is malformed / unreadable
         Encryption,           // Encrypt/decrypt failed (wrong key, tampered file)
         VersionMismatch,      // Stored data is from an incompatible save version
-        ProviderNotAvailable, // No storage provider is registered
+        ProviderNotAvailable, // No storage provider is registered for the targeted store
+        StoreNotFound,        // The requested store id is not bound in the SaveManager
         NotInitialized,       // Operation attempted before the provider was ready
         InvalidSlot,          // Slot index outside the configured range
         Unknown

@@ -9,8 +9,10 @@ namespace Kaddumi.UnityTools.Save.Interfaces
     /// (<see cref="ISaveSerializer"/>), so a provider can be PlayerPrefs, a JSON file,
     /// an encrypted file, or a cloud bucket without knowing what the bytes mean.
     ///
-    /// The <see cref="Core.SaveService"/> routes every persistence call through the single
-    /// active provider chosen in the SaveManager inspector.
+    /// A provider is bound to a named <see cref="Core.SaveStore"/> in the SaveManager
+    /// inspector, and <see cref="Core.SaveService"/> routes each saveable's payload to the
+    /// store it names — so the same game can keep settings in a local file while
+    /// progression goes to a cloud backend, with no provider aware of the other.
     /// </summary>
     public interface ISaveProvider
     {

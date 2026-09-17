@@ -1,3 +1,4 @@
+using Kaddumi.UnityTools.Save.Core;
 using Kaddumi.UnityTools.Save.Interfaces;
 using UnityEngine;
 
@@ -12,11 +13,16 @@ namespace Kaddumi.UnityTools.Save
     /// <para>Give each instance a unique <see cref="SaveKey"/>. For a single-instance system
     /// a constant string is fine; for objects there may be several of, expose a serialized id.</para>
     ///
+    /// <para>Override <see cref="StorageId"/> to choose which save store the data lands in.
+    /// The default is <see cref="SaveStores.Local"/>; return <see cref="SaveStores.Cloud"/>
+    /// (or any id bound in the SaveManager) for progression that should follow the player.</para>
+    ///
     /// <example><code>
     /// public class PlayerStats : SaveableBehaviour&lt;PlayerStats.State&gt;
     /// {
     ///     public int health;
     ///     public override string SaveKey =&gt; "player.stats";
+    ///     public override string StorageId =&gt; SaveStores.Cloud;
     ///
     ///     [System.Serializable] public class State { public int health; }
     ///
@@ -33,6 +39,13 @@ namespace Kaddumi.UnityTools.Save
 
         /// <summary>Stable unique key for this object's slice of the save.</summary>
         public abstract string SaveKey { get; }
+
+        /// <summary>
+        /// Save store this object's data belongs to. Defaults to <see cref="SaveStores.Local"/>;
+        /// override with <see cref="SaveStores.Cloud"/> — or any custom id bound in the
+        /// SaveManager inspector — for data that should live elsewhere.
+        /// </summary>
+        public virtual string StorageId => SaveStores.Local;
 
         /// <summary>Build the serializable snapshot of this object's state.</summary>
         protected abstract TState Capture();
