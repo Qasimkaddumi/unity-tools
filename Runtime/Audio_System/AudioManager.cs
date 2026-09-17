@@ -7,6 +7,7 @@ using Kaddumi.UnityTools.Audio.Providers;
 using Kaddumi.UnityTools.Save;
 using Kaddumi.UnityTools.Services;
 using UnityEngine;
+using UnityEngine.Audio;
 
 namespace Kaddumi.UnityTools.Audio
 {
@@ -195,6 +196,19 @@ namespace Kaddumi.UnityTools.Audio
         /// <summary>Flips the mute state of a bus.</summary>
         public void ToggleMute(AudioBus bus) => SetBusMuted(bus, !IsBusMuted(bus));
 
+        // --- Mixer routing ---------------------------------------------------
+
+        /// <summary>
+        /// The <see cref="AudioMixerGroup"/> a bus routes through, or null if the bus isn't
+        /// configured (or no <see cref="AudioConfig"/>/mixer is assigned). Use this to route an
+        /// external audio source — e.g. a <c>VideoPlayer</c>'s audio track — through the same bus
+        /// as the rest of the game, so this bus's volume, mute, and ducking all apply to it too.
+        /// Reads straight from the config, so it is valid even before the provider finishes
+        /// initializing. See <see cref="Video.VideoAudioRouter"/>.
+        /// </summary>
+        public AudioMixerGroup GetBusGroup(AudioBus bus)
+            => config != null ? config.GetBinding(bus)?.Group : null;
+
         // --- Ducking ---------------------------------------------------------
 
         /// <summary>Low-level duck: drops a bus to a target volume with explicit attack/release/hold.</summary>
@@ -220,6 +234,17 @@ namespace Kaddumi.UnityTools.Audio
             float release = releaseSeconds < 0f ? config.DuckReleaseSeconds : releaseSeconds;
             // Duck 'to' the stored volume with a tiny hold so the routine restores and clears itself.
             _provider?.Duck(bus, GetBusVolume(bus), release, 0f, 0.0001f);
+        }
+
+        /// <summary>
+        /// Releases the held duck applied by <see cref="DuckMusicForVoice"/>, ramping the
+        /// configured <see cref="AudioConfig.DuckBus"/> back to its stored volume. Symmetric
+        /// partner to <see cref="DuckMusicForVoice"/> so callers need not know the duck bus.
+        /// </summary>
+        public void UnduckMusic(float releaseSeconds = -1f)
+        {
+            if (config == null) return;
+            Unduck(config.DuckBus, releaseSeconds);
         }
 
         // --- Voice / lifecycle ----------------------------------------------
