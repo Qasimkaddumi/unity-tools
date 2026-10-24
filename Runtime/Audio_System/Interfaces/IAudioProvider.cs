@@ -47,6 +47,7 @@ namespace Kaddumi.UnityTools.Audio.Interfaces
         /// sync, crossfading from whatever music was playing over <paramref name="fadeSeconds"/>.
         /// A negative fade means the config's <c>DefaultMusicFadeSeconds</c>. The default
         /// implementation logs a warning and does nothing.
+        /// Calling it with the set that is already playing does nothing; call StopStems(0) first to restart it.
         /// </summary>
         void PlayStems(MusicStemSet set, float fadeSeconds)
         {
@@ -65,6 +66,23 @@ namespace Kaddumi.UnityTools.Audio.Interfaces
         /// (negative = config <c>DefaultMusicFadeSeconds</c>). No-op by default.
         /// </summary>
         void StopStems(float fadeSeconds) { }
+
+        /// <summary>
+        /// The ID of the stem set that is current (loading, playing, or fading in), or null when none
+        /// is. Null by default.
+        /// </summary>
+        string CurrentStemSetId => null;
+
+        /// <summary>
+        /// Reads the current level (0..1) of one stem of the current set, before the set's volume and
+        /// any crossfade are applied. Returns false and 0 when no set is current or the stem is
+        /// unknown. Always false by default.
+        /// </summary>
+        bool TryGetStemVolume(string stemId, out float linear01)
+        {
+            linear01 = 0f;
+            return false;
+        }
 
         // --- Ducking ---------------------------------------------------------
 

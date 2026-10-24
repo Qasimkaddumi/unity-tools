@@ -171,6 +171,7 @@ namespace Kaddumi.UnityTools.Audio
         /// <summary>
         /// Crossfades to a layered music track (a <see cref="MusicStemSet"/>) by ID. All stems play in
         /// sync; use <see cref="SetStemVolume"/> to fade individual layers. Negative fade uses the config default.
+        /// Calling it with the set that is already playing does nothing; call StopStems(0) first to restart it.
         /// </summary>
         public void PlayStems(string id, float fadeSeconds = -1f)
         {
@@ -178,7 +179,10 @@ namespace Kaddumi.UnityTools.Audio
             _provider.PlayStems(set, fadeSeconds);
         }
 
-        /// <summary>Crossfades to a layered music track directly from a stem set asset. Negative fade uses the config default.</summary>
+        /// <summary>
+        /// Crossfades to a layered music track directly from a stem set asset. Negative fade uses the config default.
+        /// Calling it with the set that is already playing does nothing; call StopStems(0) first to restart it.
+        /// </summary>
         public void PlayStems(MusicStemSet set, float fadeSeconds = -1f)
         {
             if (IsReady(set)) _provider.PlayStems(set, fadeSeconds);
@@ -193,6 +197,20 @@ namespace Kaddumi.UnityTools.Audio
 
         /// <summary>Fades out and stops the current stem set. Negative fade uses the config default.</summary>
         public void StopStems(float fadeSeconds = -1f) => _provider?.StopStems(fadeSeconds);
+
+        /// <summary>The ID of the stem set that is current (loading, playing, or fading in), or null when none is.</summary>
+        public string CurrentStemSetId => _provider?.CurrentStemSetId;
+
+        /// <summary>
+        /// Reads the current level (0..1) of one stem of the current set, before the set's volume and
+        /// any crossfade are applied. Returns false (and 0) when no stem set is current, the stem ID
+        /// is unknown, or there is no provider.
+        /// </summary>
+        public bool TryGetStemVolume(string stemId, out float linear01)
+        {
+            linear01 = 0f;
+            return _provider != null && _provider.TryGetStemVolume(stemId, out linear01);
+        }
 
         // --- Bus volume ------------------------------------------------------
 

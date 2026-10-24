@@ -79,6 +79,8 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             public MusicStemSet Set;
             public bool Idle = true;      // true when no set is assigned
             public bool Scheduled;        // true once the sources have been started
+            public bool AwaitingStart;    // true when loaded but held back (paused) until resume
+            public float PendingFade;     // fade-in seconds to use once an AwaitingStart group is scheduled
             public bool Outgoing;         // true while fading out to be stopped
             public double StartAt;        // dsp time the sources were scheduled to start
             public Coroutine LoadRoutine; // pending load-then-schedule coroutine
@@ -93,6 +95,9 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         /// <summary>True while a stem set is current (loading, playing, or fading in).</summary>
         internal bool IsPlaying => _active != null && !_active.Idle;
 
+        /// <summary>The stem set that is current (loading, playing, or fading in), or null when none is.</summary>
+        internal MusicStemSet CurrentSet => _active != null && !_active.Idle ? _active.Set : null;
+
         /// <summary>Sets the mixer group (the Music bus) that newly created stem sources route to.</summary>
         internal void Configure(AudioMixerGroup musicGroup)
         {
@@ -105,6 +110,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         /// Crossfades to a new stem set over <paramref name="fadeSeconds"/>. The incoming sources start
         /// together at one scheduled DSP time once every clip has finished loading, and the fade-in
         /// begins at that moment so load time doesn't eat it.
+        /// Calling it with the set that is already playing does nothing; call StopStems(0) first to restart it.
         /// </summary>
         internal void PlayStems(MusicStemSet set, float fadeSeconds)
         {
@@ -113,6 +119,9 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
                 Debug.LogWarning("[MusicStemPlayer] Cannot play a null or empty stem set.");
                 return;
             }
+
+            // Already the current set (even if still loading): leave it alone.
+            if (_active != null && !_active.Idle && !_active.Outgoing && _active.Set == set) return;
 
             // Fade out whatever is current (a set still loading is simply cancelled).
             Group previous = _active;
@@ -166,6 +175,23 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             _active.Levels[index].Begin(Mathf.Clamp01(linear01), fadeSeconds);
         }
 
+        /// <summary>
+        /// Reads a stem's current level (0..1, mid-fade included) from the current set, before the
+        /// set's volume and the crossfade gain are applied. False and 0 when there is no current set
+        /// or the stem is unknown.
+        /// </summary>
+        internal bool TryGetStemVolume(string stemId, out float linear01)
+        {
+            linear01 = 0f;
+            if (_active == null || _active.Idle || _active.Set == null) return false;
+
+            int index = _active.Set.IndexOf(stemId);
+            if (index < 0 || index >= _active.Levels.Count) return false;
+
+            linear01 = _active.Levels[index].Value;
+            return true;
+        }
+
         /// <summary>Fades out and stops the current set; also cancels a pending load.</summary>
         internal void StopStems(float fadeSeconds)
         {
@@ -182,19 +208,63 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             _active = null;
         }
 
-        /// <summary>Pauses/resumes every stem source in both groups in the same call.</summary>
+        /// <summary>
+        /// Pauses/resumes every stem source in both groups in the same call. A group still inside its
+        /// start-up lead time is stopped and held (AwaitingStart) instead of paused, then scheduled
+        /// afresh on resume.
+        /// </summary>
         internal void SetPaused(bool paused)
         {
             _paused = paused;
 
-            if (!paused && _active != null && _active.Scheduled) SyncSources(_active);
+            if (paused)
+            {
+                HoldIfNotStarted(_a);
+                HoldIfNotStarted(_b);
+                ApplyPause(_a, true);
+                ApplyPause(_b, true);
+                return;
+            }
 
-            ApplyPause(_a, paused);
-            ApplyPause(_b, paused);
+            bool freshA = ResumeAwaiting(_a);
+            bool freshB = ResumeAwaiting(_b);
+
+            if (_active != null && _active.Scheduled && !(_active == _a ? freshA : freshB)) SyncSources(_active);
+
+            if (!freshA) ApplyPause(_a, false);
+            if (!freshB) ApplyPause(_b, false);
+        }
+
+        // Stops a group whose scheduled start hasn't been reached yet so it can be rescheduled on resume.
+        private static void HoldIfNotStarted(Group group)
+        {
+            if (group.Idle || !group.Scheduled || AudioSettings.dspTime >= group.StartAt) return;
+
+            for (int i = 0; i < group.Sources.Count; i++)
+            {
+                var src = group.Sources[i];
+                if (src != null) src.Stop();
+            }
+
+            group.Scheduled = false;
+            group.AwaitingStart = true;
+            group.PendingFade = 0f; // its gain fade is already running
+        }
+
+        // Schedules a held group; returns true if it did (its sources are then fresh, not paused).
+        private static bool ResumeAwaiting(Group group)
+        {
+            if (group.Idle || !group.AwaitingStart) return false;
+
+            ScheduleGroup(group);
+            if (group.Gain.Value == 0f && !group.Gain.Running && !group.Outgoing)
+                group.Gain.Begin(1f, group.PendingFade);
+            return true;
         }
 
         private static void ApplyPause(Group group, bool paused)
         {
+            if (group.AwaitingStart) return; // its sources are stopped, nothing to pause
             for (int i = 0; i < group.Sources.Count; i++)
             {
                 var src = group.Sources[i];
@@ -247,26 +317,41 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
 
             group.LoadRoutine = null;
 
+            for (int i = 0; i < group.Sources.Count; i++)
+            {
+                var src = group.Sources[i];
+                if (src.clip == null || IsPlayable(src.clip)) continue;
+
+                Debug.LogWarning($"[MusicStemPlayer] Clip '{src.clip.name}' failed to load; its stem will be silent.");
+                src.clip = null; // so SyncSources never uses an unplayed source as its reference
+            }
+
+            // Paused while loading: start nothing until resume (SetPaused(false) schedules it).
+            if (_paused)
+            {
+                group.AwaitingStart = true;
+                group.PendingFade = fadeSeconds;
+                yield break;
+            }
+
+            ScheduleGroup(group);
+            group.Gain.Begin(1f, fadeSeconds);
+        }
+
+        // Starts every playable source together at one scheduled DSP time.
+        private static void ScheduleGroup(Group group)
+        {
             double startAt = AudioSettings.dspTime + ScheduleLeadSeconds;
             group.StartAt = startAt;
             for (int i = 0; i < group.Sources.Count; i++)
             {
                 var src = group.Sources[i];
-                if (src.clip == null) continue;
-
-                if (!IsPlayable(src.clip))
-                {
-                    Debug.LogWarning($"[MusicStemPlayer] Clip '{src.clip.name}' failed to load; its stem will be silent.");
-                    src.clip = null; // so SyncSources never uses an unplayed source as its reference
-                    continue;
-                }
-
+                if (src == null || src.clip == null || !IsPlayable(src.clip)) continue;
                 src.PlayScheduled(startAt);
-                if (_paused) src.Pause();
             }
 
             group.Scheduled = true;
-            group.Gain.Begin(1f, fadeSeconds);
+            group.AwaitingStart = false;
         }
 
         // Streaming clips never report Loaded, so they count as ready immediately.
@@ -329,6 +414,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             group.Set = null;
             group.Idle = true;
             group.Scheduled = false;
+            group.AwaitingStart = false;
             group.Outgoing = false;
             group.Gain.Snap(0f);
             if (_active == group) _active = null;

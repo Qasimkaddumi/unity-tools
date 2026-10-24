@@ -243,6 +243,10 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
 
         // --- Music stems -----------------------------------------------------
 
+        /// <summary>
+        /// Crossfades to a stem set. Calling it with the set that is already playing does nothing;
+        /// call StopStems(0) first to restart it.
+        /// </summary>
         public void PlayStems(MusicStemSet set, float fadeSeconds)
         {
             if (_stems == null) return;
@@ -272,6 +276,22 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         {
             if (_stems == null) return;
             _stems.StopStems(ResolveMusicFade(fadeSeconds));
+        }
+
+        public string CurrentStemSetId
+        {
+            get
+            {
+                if (_stems == null) return null;
+                var set = _stems.CurrentSet;
+                return set != null ? set.ResolvedId : null; // Unity null check; ?. would bypass it
+            }
+        }
+
+        public bool TryGetStemVolume(string stemId, out float linear01)
+        {
+            linear01 = 0f;
+            return _stems != null && _stems.TryGetStemVolume(stemId, out linear01);
         }
 
         private float ResolveMusicFade(float fadeSeconds)
