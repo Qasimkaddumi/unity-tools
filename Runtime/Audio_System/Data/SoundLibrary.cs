@@ -15,7 +15,12 @@ namespace Kaddumi.UnityTools.Audio.Data
                  "Id (or asset name when the Id is blank), which must be unique within this library.")]
         [SerializeField] private List<SoundDefinition> sounds = new List<SoundDefinition>();
 
+        [Tooltip("Music stem sets (layered music) this library exposes for string-ID playback. Each is looked " +
+                 "up by its Id (or asset name when the Id is blank), which must be unique within this library.")]
+        [SerializeField] private List<MusicStemSet> stemSets = new List<MusicStemSet>();
+
         private Dictionary<string, SoundDefinition> _lookup;
+        private Dictionary<string, MusicStemSet> _stemLookup;
 
         /// <summary>Attempts to resolve a sound by its <see cref="SoundDefinition.Id"/>.</summary>
         public bool TryGet(string id, out SoundDefinition def)
@@ -27,6 +32,32 @@ namespace Kaddumi.UnityTools.Audio.Data
                 return false;
             }
             return _lookup.TryGetValue(id, out def);
+        }
+
+        /// <summary>Attempts to resolve a music stem set by its <see cref="MusicStemSet.ResolvedId"/>.</summary>
+        public bool TryGetStemSet(string id, out MusicStemSet set)
+        {
+            EnsureStemLookup();
+            if (string.IsNullOrEmpty(id))
+            {
+                set = null;
+                return false;
+            }
+            return _stemLookup.TryGetValue(id, out set);
+        }
+
+        private void EnsureStemLookup()
+        {
+            if (_stemLookup != null) return;
+            _stemLookup = new Dictionary<string, MusicStemSet>(stemSets != null ? stemSets.Count : 0);
+            if (stemSets == null) return;
+            foreach (var s in stemSets)
+            {
+                if (s == null) continue;
+                var id = s.ResolvedId;
+                if (string.IsNullOrEmpty(id)) continue;
+                _stemLookup[id] = s; // last one wins on duplicates; OnValidate warns about them
+            }
         }
 
         private void EnsureLookup()
@@ -43,12 +74,17 @@ namespace Kaddumi.UnityTools.Audio.Data
         }
 
         // Rebuild lazily after edits in the inspector.
-        private void OnDisable() => _lookup = null;
+        private void OnDisable()
+        {
+            _lookup = null;
+            _stemLookup = null;
+        }
 
 #if UNITY_EDITOR
         private void OnValidate()
         {
             _lookup = null;
+            _stemLookup = null;
             var seen = new HashSet<string>();
             foreach (var s in sounds)
             {
@@ -58,6 +94,20 @@ namespace Kaddumi.UnityTools.Audio.Data
                 if (!seen.Add(id))
                 {
                     Debug.LogWarning($"[SoundLibrary] '{name}' has a duplicate sound Id '{id}'. " +
+                                     "Only the last entry with this Id will be playable.", this);
+                }
+            }
+
+            if (stemSets == null) return;
+            var seenStems = new HashSet<string>();
+            foreach (var s in stemSets)
+            {
+                if (s == null) continue;
+                var id = s.ResolvedId;
+                if (string.IsNullOrEmpty(id)) continue;
+                if (!seenStems.Add(id))
+                {
+                    Debug.LogWarning($"[SoundLibrary] '{name}' has a duplicate stem set Id '{id}'. " +
                                      "Only the last entry with this Id will be playable.", this);
                 }
             }

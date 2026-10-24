@@ -44,7 +44,7 @@ namespace Kaddumi.UnityTools.Audio.Data
         [Tooltip("Voices pre-created at startup for one-shot/looping SFX.")]
         [Min(1)] public int InitialPoolSize = 16;
 
-        [Tooltip("Hard cap on pooled voices. The pool grows on demand up to this value, then steals the oldest voice.")]
+        [Tooltip("Hard cap on pooled voices. The pool grows on demand up to this value, then steals the least important voice (one-shots before loops, lowest priority, then oldest).")]
         [Min(1)] public int MaxPoolSize = 48;
 
         [Header("Music")]

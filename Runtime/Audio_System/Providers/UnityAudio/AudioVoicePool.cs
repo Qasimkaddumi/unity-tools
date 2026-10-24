@@ -24,6 +24,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             public float StartTime;  // unscaled time the voice was last acquired (for voice stealing)
             public AudioBus Bus;
             public string SoundId;   // for per-sound MaxVoices accounting
+            public Coroutine FadeRoutine; // provider-run volume fade (FadeVoice); null when none
         }
 
         private readonly List<Voice> _voices = new List<Voice>();
@@ -52,7 +53,8 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
 
         /// <summary>
         /// Acquires a voice for a sound, growing the pool up to the cap and otherwise stealing
-        /// the oldest active voice. Bumps the returned voice's generation and marks it active.
+        /// the least important active voice (one-shots before loops, then the lowest Unity priority,
+        /// then the oldest). Bumps the returned voice's generation and marks it active.
         /// </summary>
         internal Voice Acquire(AudioBus bus, string soundId, out int index)
         {
@@ -74,11 +76,16 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
                 return Activate(voice, bus, soundId);
             }
 
-            // 3) Steal the oldest active voice.
-            index = OldestActiveIndex();
+            // 3) Steal the least important active voice.
+            index = StealVictimIndex();
             var stolen = _voices[index];
             stolen.Source.Stop();
             stolen.Fading = false;
+            if (stolen.FadeRoutine != null)
+            {
+                StopCoroutine(stolen.FadeRoutine);
+                stolen.FadeRoutine = null;
+            }
             return Activate(stolen, bus, soundId);
         }
 
@@ -93,19 +100,31 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             return voice;
         }
 
-        private int OldestActiveIndex()
+        // Victim order: non-looping before looping, then highest Source.priority number
+        // (0 = most important), then oldest StartTime. Always returns a valid index.
+        private int StealVictimIndex()
         {
-            int oldest = 0;
-            float oldestTime = float.MaxValue;
+            int victim = -1;
             for (int i = 0; i < _voices.Count; i++)
             {
-                if (_voices[i].Active && _voices[i].StartTime < oldestTime)
-                {
-                    oldestTime = _voices[i].StartTime;
-                    oldest = i;
-                }
+                var v = _voices[i];
+                if (!v.Active) continue;
+                if (victim < 0 || IsBetterVictim(v, _voices[victim])) victim = i;
             }
-            return oldest;
+            return victim >= 0 ? victim : 0;
+        }
+
+        private static bool IsBetterVictim(Voice candidate, Voice current)
+        {
+            bool candLoop = candidate.Source != null && candidate.Source.loop;
+            bool currLoop = current.Source != null && current.Source.loop;
+            if (candLoop != currLoop) return !candLoop;
+
+            int candPriority = candidate.Source != null ? candidate.Source.priority : 128;
+            int currPriority = current.Source != null ? current.Source.priority : 128;
+            if (candPriority != currPriority) return candPriority > currPriority;
+
+            return candidate.StartTime < current.StartTime;
         }
 
         /// <summary>Returns a voice to the pool and silences its source.</summary>
@@ -116,6 +135,11 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             voice.Active = false;
             voice.Fading = false;
             voice.SoundId = null;
+            if (voice.FadeRoutine != null)
+            {
+                StopCoroutine(voice.FadeRoutine);
+                voice.FadeRoutine = null;
+            }
             if (voice.Source != null)
             {
                 voice.Source.Stop();

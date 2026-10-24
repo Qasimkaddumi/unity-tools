@@ -168,6 +168,32 @@ namespace Kaddumi.UnityTools.Audio
         /// <summary>Fades out the current music. Negative fade uses the config default.</summary>
         public void StopMusic(float fadeSeconds = -1f) => _provider?.StopMusic(fadeSeconds);
 
+        /// <summary>
+        /// Crossfades to a layered music track (a <see cref="MusicStemSet"/>) by ID. All stems play in
+        /// sync; use <see cref="SetStemVolume"/> to fade individual layers. Negative fade uses the config default.
+        /// </summary>
+        public void PlayStems(string id, float fadeSeconds = -1f)
+        {
+            if (!TryResolveStemSet(id, out var set)) return;
+            _provider.PlayStems(set, fadeSeconds);
+        }
+
+        /// <summary>Crossfades to a layered music track directly from a stem set asset. Negative fade uses the config default.</summary>
+        public void PlayStems(MusicStemSet set, float fadeSeconds = -1f)
+        {
+            if (IsReady(set)) _provider.PlayStems(set, fadeSeconds);
+        }
+
+        /// <summary>
+        /// Fades one layer of the playing stem set to a linear volume (0..1) while all layers keep
+        /// playing. Negative fade uses the config's default music fade; 0 snaps.
+        /// </summary>
+        public void SetStemVolume(string stemId, float linear01, float fadeSeconds = -1f)
+            => _provider?.SetStemVolume(stemId, Mathf.Clamp01(linear01), fadeSeconds);
+
+        /// <summary>Fades out and stops the current stem set. Negative fade uses the config default.</summary>
+        public void StopStems(float fadeSeconds = -1f) => _provider?.StopStems(fadeSeconds);
+
         // --- Bus volume ------------------------------------------------------
 
         /// <summary>Sets a bus volume (linear 0..1), applies it to the mixer, and raises <see cref="OnBusChanged"/>.</summary>
@@ -255,6 +281,9 @@ namespace Kaddumi.UnityTools.Audio
         /// <summary>Sets a live voice's linear volume (per-source, on top of its bus). Safe no-op on stale handles.</summary>
         public void SetVoiceVolume(AudioHandle handle, float volume) => _provider?.SetVoiceVolume(handle, volume);
 
+        /// <summary>Fades a live voice's volume to a target over time without stopping it. Safe no-op on stale handles.</summary>
+        public void FadeVoice(AudioHandle handle, float toVolume, float seconds) => _provider?.FadeVoice(handle, toVolume, seconds);
+
         /// <summary>Sets a live voice's pitch / playback rate (1 = normal). Safe no-op on stale handles.</summary>
         public void SetVoicePitch(AudioHandle handle, float pitch) => _provider?.SetVoicePitch(handle, pitch);
 
@@ -312,6 +341,42 @@ namespace Kaddumi.UnityTools.Audio
             if (sound == null)
             {
                 Debug.LogWarning("[AudioManager] Null sound asset passed to an audio request.");
+                return false;
+            }
+            return true;
+        }
+
+        private bool IsReady(MusicStemSet set)
+        {
+            if (_provider == null)
+            {
+                Debug.LogWarning("[AudioManager] Not initialized yet; ignoring audio request.");
+                return false;
+            }
+            if (set == null)
+            {
+                Debug.LogWarning("[AudioManager] Null music stem set passed to an audio request.");
+                return false;
+            }
+            return true;
+        }
+
+        private bool TryResolveStemSet(string id, out MusicStemSet set)
+        {
+            set = null;
+            if (_provider == null)
+            {
+                Debug.LogWarning("[AudioManager] Not initialized yet; ignoring audio request.");
+                return false;
+            }
+            if (library == null)
+            {
+                Debug.LogWarning("[AudioManager] No SoundLibrary assigned; cannot play by ID.");
+                return false;
+            }
+            if (!library.TryGetStemSet(id, out set))
+            {
+                Debug.LogWarning($"[AudioManager] Stem set '{id}' not found in the assigned SoundLibrary.");
                 return false;
             }
             return true;

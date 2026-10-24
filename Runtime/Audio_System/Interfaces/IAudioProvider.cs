@@ -38,6 +38,34 @@ namespace Kaddumi.UnityTools.Audio.Interfaces
         /// <summary>Fades out and stops the current music.</summary>
         void StopMusic(float fadeSeconds);
 
+        // --- Music stems (optional) ------------------------------------------
+        // Default implementations keep existing third-party providers compiling; providers that
+        // support layered music override them.
+
+        /// <summary>
+        /// Starts a layered music track: every stem in <paramref name="set"/> plays in sample-accurate
+        /// sync, crossfading from whatever music was playing over <paramref name="fadeSeconds"/>.
+        /// A negative fade means the config's <c>DefaultMusicFadeSeconds</c>. The default
+        /// implementation logs a warning and does nothing.
+        /// </summary>
+        void PlayStems(MusicStemSet set, float fadeSeconds)
+        {
+            Debug.LogWarning("[IAudioProvider] " + GetType().Name + " does not support music stems.");
+        }
+
+        /// <summary>
+        /// Fades one stem of the currently playing stem set to <paramref name="linear01"/> over
+        /// <paramref name="fadeSeconds"/> while all stems keep playing. A negative fade means the
+        /// config's <c>DefaultMusicFadeSeconds</c>; 0 snaps. No-op by default.
+        /// </summary>
+        void SetStemVolume(string stemId, float linear01, float fadeSeconds) { }
+
+        /// <summary>
+        /// Fades out and stops the current stem set over <paramref name="fadeSeconds"/>
+        /// (negative = config <c>DefaultMusicFadeSeconds</c>). No-op by default.
+        /// </summary>
+        void StopStems(float fadeSeconds) { }
+
         // --- Ducking ---------------------------------------------------------
 
         /// <summary>
@@ -54,6 +82,13 @@ namespace Kaddumi.UnityTools.Audio.Interfaces
 
         /// <summary>Sets a live voice's linear volume (per-source, on top of its bus). No-op if the handle is stale.</summary>
         void SetVoiceVolume(AudioHandle handle, float volume);
+
+        /// <summary>
+        /// Fades a live voice's linear volume to <paramref name="toVolume"/> over
+        /// <paramref name="seconds"/> without stopping it. A duration of 0 or less snaps. No-op if the
+        /// handle is stale. The default implementation snaps via <see cref="SetVoiceVolume"/>.
+        /// </summary>
+        void FadeVoice(AudioHandle handle, float toVolume, float seconds) => SetVoiceVolume(handle, toVolume);
 
         /// <summary>Sets a live voice's pitch / playback rate (1 = normal). No-op if the handle is stale.</summary>
         void SetVoicePitch(AudioHandle handle, float pitch);

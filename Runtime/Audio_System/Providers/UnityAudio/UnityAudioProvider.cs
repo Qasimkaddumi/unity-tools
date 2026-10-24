@@ -31,6 +31,9 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         private bool _musicAActive;
         private Coroutine _musicRoutine;
 
+        // Layered music (stems) is handled by its own player on the same host.
+        private MusicStemPlayer _stems;
+
         // Per-bus state (linear 0..1 and mute), mirrored into the mixer.
         private readonly Dictionary<AudioBus, float> _busVolume = new Dictionary<AudioBus, float>();
         private readonly Dictionary<AudioBus, bool> _busMuted = new Dictionary<AudioBus, bool>();
@@ -48,6 +51,8 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
                 config != null ? config.MaxPoolSize : 48);
 
             CreateMusicSources();
+            _stems = _host.AddComponent<MusicStemPlayer>();
+            _stems.Configure(_config != null ? _config.GetBinding(AudioBus.Music)?.Group : null);
             ApplyDefaultBusVolumes();
 
             onComplete?.Invoke();
@@ -199,6 +204,9 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
 
             if (fadeSeconds < 0f) fadeSeconds = _config != null ? _config.DefaultMusicFadeSeconds : 1.5f;
 
+            // One music at a time: fade out any layered music first.
+            if (_stems != null && _stems.IsPlaying) _stems.StopStems(fadeSeconds);
+
             AudioSource incoming = _musicAActive ? _musicB : _musicA;
             AudioSource outgoing = _musicAActive ? _musicA : _musicB;
             _musicAActive = !_musicAActive;
@@ -218,12 +226,58 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         public void StopMusic(float fadeSeconds)
         {
             if (fadeSeconds < 0f) fadeSeconds = _config != null ? _config.DefaultMusicFadeSeconds : 1.5f;
+            StopMusicSources(fadeSeconds);
+            if (_stems != null) _stems.StopStems(fadeSeconds);
+        }
+
+        // Fades out the regular A/B music sources only (not stems). Expects a resolved fade.
+        private void StopMusicSources(float fadeSeconds)
+        {
             AudioSource active = _musicAActive ? _musicA : _musicB;
             AudioSource other = _musicAActive ? _musicB : _musicA;
             if (_musicRoutine != null) _pool.StopCoroutine(_musicRoutine);
             _musicRoutine = _pool.StartCoroutine(CrossfadeMusic(null, active, 0f, fadeSeconds));
             // Ensure the previously-outgoing source is fully silenced too.
             if (other != null) { other.Stop(); other.volume = 0f; }
+        }
+
+        // --- Music stems -----------------------------------------------------
+
+        public void PlayStems(MusicStemSet set, float fadeSeconds)
+        {
+            if (_stems == null) return;
+            if (set == null)
+            {
+                Debug.LogWarning("[UnityAudioProvider] Cannot play a null music stem set.");
+                return;
+            }
+
+            fadeSeconds = ResolveMusicFade(fadeSeconds);
+
+            // One music at a time: fade out regular A/B music if it's playing.
+            if ((_musicA != null && (_musicA.isPlaying || _musicA.volume > 0f)) ||
+                (_musicB != null && (_musicB.isPlaying || _musicB.volume > 0f)))
+                StopMusicSources(fadeSeconds);
+
+            _stems.PlayStems(set, fadeSeconds);
+        }
+
+        public void SetStemVolume(string stemId, float linear01, float fadeSeconds)
+        {
+            if (_stems == null) return;
+            _stems.SetStemVolume(stemId, linear01, ResolveMusicFade(fadeSeconds));
+        }
+
+        public void StopStems(float fadeSeconds)
+        {
+            if (_stems == null) return;
+            _stems.StopStems(ResolveMusicFade(fadeSeconds));
+        }
+
+        private float ResolveMusicFade(float fadeSeconds)
+        {
+            if (fadeSeconds >= 0f) return fadeSeconds;
+            return _config != null ? _config.DefaultMusicFadeSeconds : 1.5f;
         }
 
         private IEnumerator CrossfadeMusic(AudioSource incoming, AudioSource outgoing, float targetVolume, float seconds)
@@ -316,6 +370,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
                 _pool.Release(index);
                 return;
             }
+            CancelVoiceFade(voice);
             voice.Fading = true;
             _pool.StartCoroutine(FadeOutVoice(voice, index, fadeSeconds));
         }
@@ -323,7 +378,57 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         public void SetVoiceVolume(AudioHandle handle, float volume)
         {
             if (_pool.TryResolve(handle, out var voice, out _) && voice.Source != null)
+            {
+                CancelVoiceFade(voice);
                 voice.Source.volume = Mathf.Max(0f, volume);
+            }
+        }
+
+        /// <summary>
+        /// Fades a pooled voice's volume to <paramref name="toVolume"/> over <paramref name="seconds"/>
+        /// without stopping it; 0 or less snaps. A new fade replaces a running one. Safe no-op on stale handles.
+        /// </summary>
+        public void FadeVoice(AudioHandle handle, float toVolume, float seconds)
+        {
+            if (!_pool.TryResolve(handle, out var voice, out _) || voice.Source == null) return;
+            CancelVoiceFade(voice);
+
+            float target = Mathf.Max(0f, toVolume);
+            if (seconds <= 0f)
+            {
+                voice.Source.volume = target;
+                return;
+            }
+
+            // Deliberately not setting voice.Fading: the pool must still reclaim a one-shot that ends mid-fade.
+            voice.FadeRoutine = _pool.StartCoroutine(FadeVoiceRoutine(voice, target, seconds));
+        }
+
+        private void CancelVoiceFade(AudioVoicePool.Voice voice)
+        {
+            if (voice.FadeRoutine == null) return;
+            _pool.StopCoroutine(voice.FadeRoutine);
+            voice.FadeRoutine = null;
+        }
+
+        private IEnumerator FadeVoiceRoutine(AudioVoicePool.Voice voice, float target, float seconds)
+        {
+            int generation = voice.Generation;
+            float start = voice.Source.volume;
+            float t = 0f;
+            while (t < seconds)
+            {
+                // Bail if the voice was released or recycled out from under us.
+                if (!voice.Active || voice.Generation != generation) yield break;
+                t += Time.unscaledDeltaTime;
+                voice.Source.volume = Mathf.Lerp(start, target, Mathf.Clamp01(t / seconds));
+                yield return null;
+            }
+            if (voice.Active && voice.Generation == generation)
+            {
+                voice.Source.volume = target;
+                voice.FadeRoutine = null;
+            }
         }
 
         public void SetVoicePitch(AudioHandle handle, float pitch)
@@ -366,7 +471,11 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         public void StopBus(AudioBus bus)
         {
             _pool.StopBus(bus);
-            if (bus == AudioBus.Music) StopMusic(0f);
+            if (bus == AudioBus.Music)
+            {
+                StopMusic(0f);
+                if (_stems != null) _stems.StopAll();
+            }
         }
 
         public void SetPaused(bool paused)
@@ -374,6 +483,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             _pool.SetPaused(paused);
             if (_musicA != null) { if (paused) _musicA.Pause(); else _musicA.UnPause(); }
             if (_musicB != null) { if (paused) _musicB.Pause(); else _musicB.UnPause(); }
+            if (_stems != null) _stems.SetPaused(paused);
         }
     }
 }
