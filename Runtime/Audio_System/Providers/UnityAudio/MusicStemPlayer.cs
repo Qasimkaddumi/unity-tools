@@ -15,7 +15,8 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
     /// <para>Two groups of sources (A and B) are ping-ponged on each <see cref="PlayStems"/>, like the
     /// provider's A/B music sources, so a new set crossfades in over the old one. Stem sources are
     /// created lazily as children of the host and never come from the SFX pool. All fades run in
-    /// <see cref="Update"/> with unscaled time, matching the provider's music crossfade.</para>
+    /// <see cref="Update"/> with unscaled time, matching the provider's music crossfade, but freeze
+    /// while paused so they resume where they left off.</para>
     /// </summary>
     internal class MusicStemPlayer : MonoBehaviour
     {
@@ -444,6 +445,8 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
 
         private void Update()
         {
+            // Fades freeze while paused so a stem or crossfade can't finish silently behind a pause menu.
+            if (_paused) return;
             TickGroup(_a);
             TickGroup(_b);
         }
