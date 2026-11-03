@@ -71,7 +71,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         /// Acquires a voice for a sound, growing the pool up to the cap and otherwise stealing
         /// the least important active voice (one-shots before loops, then the lowest Unity priority,
         /// then the oldest). Bumps the returned voice's generation and marks it active. With priority
-        /// stealing on, only voices of the same or lower priority can be stolen, and this returns null
+        /// stealing on, only voices of lower priority than the new sound can be stolen, and this returns null
         /// (index -1) when there are none.
         /// </summary>
         internal Voice Acquire(SoundDefinition sound, out int index)
@@ -167,14 +167,14 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         }
 
         // Priority-stealing victim: highest Source.priority number (0 = most important), then oldest
-        // StartTime, among voices no more important than the new sound. -1 when there are none.
+        // StartTime, among voices less important than the new sound. -1 when there are none.
         private int PriorityVictimIndex(int newPriority)
         {
             int victim = -1;
             for (int i = 0; i < _voices.Count; i++)
             {
                 var v = _voices[i];
-                if (!v.Active || v.Source == null || v.Source.priority < newPriority) continue;
+                if (!v.Active || v.Source == null || v.Source.priority <= newPriority) continue;
                 if (victim < 0) { victim = i; continue; }
 
                 var current = _voices[victim];

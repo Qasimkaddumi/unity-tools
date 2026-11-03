@@ -47,7 +47,7 @@ namespace Kaddumi.UnityTools.Audio.Data
         [Tooltip("Hard cap on pooled voices. The pool grows on demand up to this value, then steals the least important voice (one-shots before loops, lowest priority, then oldest).")]
         [Min(1)] public int MaxPoolSize = 48;
 
-        [Tooltip("When the pool is full, steal only voices of the same or lower priority than the new sound (lowest priority first, then oldest). If there are none, the new sound doesn't play. When off, a full pool always steals: one-shots before loops, lowest priority, then oldest.")]
+        [Tooltip("When the pool is full, steal only voices of lower priority than the new sound (lowest priority first, then oldest). If there are none, including when all are of equal priority, the new sound doesn't play. When off, a full pool always steals: one-shots before loops, lowest priority, then oldest.")]
         public bool PriorityStealing = false;
 
         [Header("Music")]

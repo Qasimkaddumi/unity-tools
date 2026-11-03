@@ -37,6 +37,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         internal void Load(IReadOnlyList<SoundDefinition> sounds, Action<float> progress, Action done)
         {
             var clips = new List<AudioClip>();
+            var seen = new HashSet<AudioClip>();
             if (sounds != null)
             {
                 for (int i = 0; i < sounds.Count; i++)
@@ -50,7 +51,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
                         _refCounts.TryGetValue(clip, out int count);
                         _refCounts[clip] = count + 1;
                         _pendingUnload.Remove(clip);
-                        if (!clips.Contains(clip)) clips.Add(clip);
+                        if (seen.Add(clip)) clips.Add(clip);
                     }
                 }
             }
