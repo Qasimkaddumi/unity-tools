@@ -20,7 +20,7 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
         };
 
         private SerializedProperty _id, _clips, _bus, _volume, _pitchRange, _loop;
-        private SerializedProperty _spatialBlend, _minDistance, _maxDistance, _maxVoices, _priority;
+        private SerializedProperty _spatialBlend, _minDistance, _maxDistance, _rolloff, _rolloffCurve, _maxVoices, _limitMode, _priority;
         private ReorderableList _clipList;
         private AudioClip _lastPreviewClip;
 
@@ -36,7 +36,10 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
             _spatialBlend = serializedObject.FindProperty(nameof(SoundDefinition.SpatialBlend));
             _minDistance = serializedObject.FindProperty(nameof(SoundDefinition.MinDistance));
             _maxDistance = serializedObject.FindProperty(nameof(SoundDefinition.MaxDistance));
+            _rolloff = serializedObject.FindProperty(nameof(SoundDefinition.Rolloff));
+            _rolloffCurve = serializedObject.FindProperty(nameof(SoundDefinition.RolloffCurve));
             _maxVoices = serializedObject.FindProperty(nameof(SoundDefinition.MaxVoices));
+            _limitMode = serializedObject.FindProperty(nameof(SoundDefinition.LimitMode));
             _priority = serializedObject.FindProperty(nameof(SoundDefinition.Priority));
 
             _clipList = new ReorderableList(serializedObject, _clips, true, true, true, true)
@@ -94,6 +97,8 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
                 EditorGUILayout.PropertyField(_loop);
                 EditorGUILayout.PropertyField(_priority);
                 EditorGUILayout.PropertyField(_maxVoices, new GUIContent("Max Voices (0 = unlimited)"));
+                using (new EditorGUI.DisabledScope(_maxVoices.intValue <= 0))
+                    EditorGUILayout.PropertyField(_limitMode);
             }
             EditorGUILayout.Space(6);
 
@@ -107,6 +112,9 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
                     EditorGUILayout.PropertyField(_maxDistance);
                     if (_minDistance.floatValue > _maxDistance.floatValue)
                         EditorGUILayout.HelpBox("Min Distance is greater than Max Distance.", MessageType.Error);
+                    EditorGUILayout.PropertyField(_rolloff);
+                    if (so.Rolloff == AudioRolloffMode.Custom)
+                        EditorGUILayout.PropertyField(_rolloffCurve);
                 }
             }
 

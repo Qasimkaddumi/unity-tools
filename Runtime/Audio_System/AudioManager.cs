@@ -54,6 +54,28 @@ namespace Kaddumi.UnityTools.Audio
         /// <summary>Raised whenever a bus volume or mute state changes (e.g. to update UI sliders).</summary>
         public event Action<AudioBus> OnBusChanged;
 
+        /// <summary>
+        /// Raised when a voice reaches its natural end. Not raised when it is stopped or stolen, or when
+        /// a looping voice stops because its target was destroyed; use <see cref="IsVoicePlaying"/> for those.
+        /// </summary>
+        public event Action<AudioHandle> VoiceFinished;
+
+        /// <summary>
+        /// Sets the configuration from code instead of the inspector. Call before <see cref="Initialize"/>.
+        /// The library can be null when sounds are only played from assets.
+        /// </summary>
+        public void Configure(AudioConfig audioConfig, SoundLibrary soundLibrary, AudioProviderSO audioProvider)
+        {
+            if (_provider != null)
+            {
+                Debug.LogWarning("[AudioManager] Configure called after Initialize; ignoring it.");
+                return;
+            }
+            config = audioConfig;
+            library = soundLibrary;
+            provider = audioProvider;
+        }
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -76,6 +98,7 @@ namespace Kaddumi.UnityTools.Audio
             SeedDefaultsFromConfig();
 
             _provider = provider.CreateProvider();
+            _provider.VoiceFinished += RaiseVoiceFinished;
             _provider.Initialize(config, () =>
             {
                 // Push seeded defaults into the freshly-created provider.
@@ -118,7 +141,10 @@ namespace Kaddumi.UnityTools.Audio
         private void OnDestroy()
         {
             if (_saveable != null) SaveManager.Instance?.Unregister(_saveable);
+            if (_provider != null) _provider.VoiceFinished -= RaiseVoiceFinished;
         }
+
+        private void RaiseVoiceFinished(AudioHandle handle) => VoiceFinished?.Invoke(handle);
 
         // --- SFX -------------------------------------------------------------
 
@@ -150,6 +176,44 @@ namespace Kaddumi.UnityTools.Audio
         public AudioHandle PlaySfx(SoundDefinition sound, Vector3 position = default)
             => IsReady(sound) ? _provider.PlaySfx(sound, position, spatial: true) : AudioHandle.Invalid;
 
+        /// <summary>
+        /// Plays a sound asset with per-play overrides. Returns an invalid handle if the sound has no
+        /// clip or a voice limit refuses it. Spatial and Follow are separate; see <see cref="SoundPlayOptions"/>.
+        /// </summary>
+        public AudioHandle PlaySfxWithOptions(SoundDefinition sound, in SoundPlayOptions options)
+            => IsReady(sound) ? _provider.PlaySfxWithOptions(sound, options) : AudioHandle.Invalid;
+
+        /// <summary>
+        /// Plays a sound asset starting at an exact DSP time (see <c>AudioSettings.dspTime</c>), for
+        /// gapless start, loop and end clips. The voice counts as playing while it waits.
+        /// </summary>
+        public AudioHandle PlaySfxScheduled(SoundDefinition sound, in SoundPlayOptions options, double dspTime)
+            => IsReady(sound) ? _provider.PlaySfxScheduled(sound, options, dspTime) : AudioHandle.Invalid;
+
+        // --- Clip data -------------------------------------------------------
+
+        /// <summary>
+        /// Adds a reference to the sounds' clips and loads them. Pair it with <see cref="UnloadSounds"/>.
+        /// <paramref name="done"/> always fires once. Only clips with "Load In Background" ticked in their
+        /// import settings avoid blocking the main thread; others log a warning.
+        /// </summary>
+        public void LoadSounds(IReadOnlyList<SoundDefinition> sounds, Action<float> progress = null, Action done = null)
+        {
+            if (_provider == null)
+            {
+                Debug.LogWarning("[AudioManager] Not initialized yet; ignoring audio request.");
+                done?.Invoke();
+                return;
+            }
+            _provider.LoadSounds(sounds, progress, done);
+        }
+
+        /// <summary>Drops the references added by <see cref="LoadSounds"/>. A clip unloads once nothing needs or plays it.</summary>
+        public void UnloadSounds(IReadOnlyList<SoundDefinition> sounds) => _provider?.UnloadSounds(sounds);
+
+        /// <summary>True when every clip of the sound is ready to play.</summary>
+        public bool IsLoaded(SoundDefinition sound) => _provider != null && _provider.IsLoaded(sound);
+
         // --- Music -----------------------------------------------------------
 
         /// <summary>Crossfades to a music track by ID. Negative fade uses the config default.</summary>
@@ -164,6 +228,30 @@ namespace Kaddumi.UnityTools.Audio
         {
             if (IsReady(sound)) _provider.PlayMusic(sound, fadeSeconds);
         }
+
+        /// <summary>Crossfades to a music track at an explicit volume; null uses the sound's own. Negative fade uses the config default.</summary>
+        public void PlayMusic(SoundDefinition sound, float fadeSeconds, float? volume)
+        {
+            if (IsReady(sound)) _provider.PlayMusic(sound, fadeSeconds, volume);
+        }
+
+        /// <summary>True from PlayMusic until the music is stopped, including while paused. Stems don't count; see <see cref="CurrentStemSetId"/>.</summary>
+        public bool IsMusicPlaying => _provider != null && _provider.IsMusicPlaying;
+
+        /// <summary>The sound started by PlayMusic, or null when none is.</summary>
+        public SoundDefinition CurrentMusic => _provider?.CurrentMusic;
+
+        /// <summary>Playback position of the current music in seconds; 0 when none is playing.</summary>
+        public float MusicTime => _provider != null ? _provider.MusicTime : 0f;
+
+        /// <summary>Length of the current music clip in seconds; 0 when none is playing.</summary>
+        public float MusicLength => _provider != null ? _provider.MusicLength : 0f;
+
+        /// <summary>
+        /// How many times the current music has wrapped back to its start. It changes only after the
+        /// track has restarted; to crossfade before the end, compare <see cref="MusicTime"/> to <see cref="MusicLength"/>.
+        /// </summary>
+        public int MusicLoopCount => _provider != null ? _provider.MusicLoopCount : 0;
 
         /// <summary>Fades out the current music. Negative fade uses the config default.</summary>
         public void StopMusic(float fadeSeconds = -1f) => _provider?.StopMusic(fadeSeconds);
@@ -310,6 +398,24 @@ namespace Kaddumi.UnityTools.Audio
 
         /// <summary>Seeks a live voice to a playback position in seconds (clamped to the clip). Safe no-op on stale handles.</summary>
         public void SetVoiceTime(AudioHandle handle, float seconds) => _provider?.SetVoiceTime(handle, seconds);
+
+        /// <summary>
+        /// Makes a voice's position track an object; null detaches it. If the target is destroyed, a
+        /// looping voice stops and a one-shot finishes at its last position. Safe no-op on stale handles.
+        /// </summary>
+        public void AttachVoice(AudioHandle handle, Transform target) => _provider?.AttachVoice(handle, target);
+
+        /// <summary>Moves a live voice, detaching it from any target. Safe no-op on stale handles.</summary>
+        public void SetVoicePosition(AudioHandle handle, Vector3 position) => _provider?.SetVoicePosition(handle, position);
+
+        /// <summary>
+        /// True while a voice is playing or waiting to: paused, fading, loading, or scheduled but not
+        /// started. False once it has ended or the handle is stale.
+        /// </summary>
+        public bool IsVoicePlaying(AudioHandle handle) => _provider != null && _provider.IsVoicePlaying(handle);
+
+        /// <summary>Ends a voice at an exact DSP time, including a looping voice. Safe no-op on stale handles.</summary>
+        public void SetVoiceScheduledEnd(AudioHandle handle, double dspTime) => _provider?.SetVoiceScheduledEnd(handle, dspTime);
 
         /// <summary>Stops every active voice on a bus.</summary>
         public void StopBus(AudioBus bus) => _provider?.StopBus(bus);

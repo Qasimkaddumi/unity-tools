@@ -99,6 +99,20 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         /// <summary>The stem set that is current (loading, playing, or fading in), or null when none is.</summary>
         internal MusicStemSet CurrentSet => _active != null && !_active.Idle ? _active.Set : null;
 
+        /// <summary>True if a stem of either group currently holds this clip.</summary>
+        internal bool IsClipInUse(AudioClip clip) => GroupHolds(_a, clip) || GroupHolds(_b, clip);
+
+        private static bool GroupHolds(Group group, AudioClip clip)
+        {
+            if (group.Idle) return false;
+            for (int i = 0; i < group.Sources.Count; i++)
+            {
+                var src = group.Sources[i];
+                if (src != null && src.clip == clip) return true;
+            }
+            return false;
+        }
+
         /// <summary>Sets the mixer group (the Music bus) that newly created stem sources route to.</summary>
         internal void Configure(AudioMixerGroup musicGroup)
         {

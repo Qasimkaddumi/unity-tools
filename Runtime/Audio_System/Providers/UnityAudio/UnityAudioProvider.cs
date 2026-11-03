@@ -16,8 +16,8 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
     /// music sources used for A/B crossfading. Bus volumes are applied by writing exposed mixer
     /// parameters in decibels.
     ///
-    /// <para>Note: <see cref="PlayMusic"/> returns <see cref="AudioHandle.Invalid"/> — music is a
-    /// singleton stream controlled via <see cref="StopMusic"/> and the Music bus, not per-voice.</para>
+    /// <para>Note: PlayMusic returns <see cref="AudioHandle.Invalid"/> — music is a singleton stream
+    /// controlled via <see cref="StopMusic"/> and the Music bus, not per-voice.</para>
     /// </summary>
     public class UnityAudioProvider : IAudioProvider
     {
@@ -31,13 +31,24 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         private bool _musicAActive;
         private Coroutine _musicRoutine;
 
+        // The sound PlayMusic last started; null once it is stopped. Kept apart from isPlaying,
+        // which also reads false while paused and while the clip loads.
+        private SoundDefinition _currentMusic;
+        private int _musicLoopCount;
+        private int _lastMusicSamples;
+
         // Layered music (stems) is handled by its own player on the same host.
         private MusicStemPlayer _stems;
+
+        private AudioClipLoader _clipLoader;
+        private bool _paused;
 
         // Per-bus state (linear 0..1 and mute), mirrored into the mixer.
         private readonly Dictionary<AudioBus, float> _busVolume = new Dictionary<AudioBus, float>();
         private readonly Dictionary<AudioBus, bool> _busMuted = new Dictionary<AudioBus, bool>();
         private readonly Dictionary<AudioBus, Coroutine> _duckRoutines = new Dictionary<AudioBus, Coroutine>();
+
+        public event Action<AudioHandle> VoiceFinished;
 
         public void Initialize(AudioConfig config, Action onComplete)
         {
@@ -48,12 +59,16 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             _pool = _host.AddComponent<AudioVoicePool>();
             _pool.Configure(
                 config != null ? config.InitialPoolSize : 16,
-                config != null ? config.MaxPoolSize : 48);
+                config != null ? config.MaxPoolSize : 48,
+                config != null && config.PriorityStealing);
+            _pool.VoiceFinished += handle => VoiceFinished?.Invoke(handle);
 
             CreateMusicSources();
             _stems = _host.AddComponent<MusicStemPlayer>();
             _stems.Configure(_config != null ? _config.GetBinding(AudioBus.Music)?.Group : null);
+            _clipLoader = new AudioClipLoader(_pool, IsClipInUse);
             ApplyDefaultBusVolumes();
+            _pool.StartCoroutine(TickRoutine());
 
             onComplete?.Invoke();
         }
@@ -147,52 +162,179 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
 
         public AudioHandle PlaySfx(SoundDefinition def, Vector3 position, bool spatial)
         {
-            if (def == null) return AudioHandle.Invalid;
-            var clip = def.PickClip();
+            var options = new SoundPlayOptions { Position = position, Spatial = spatial };
+            return PlaySfxWithOptions(def, options);
+        }
+
+        public AudioHandle PlaySfxWithOptions(SoundDefinition def, in SoundPlayOptions options)
+        {
+            var voice = PrepareVoice(def, options, out int index);
+            if (voice == null) return AudioHandle.Invalid;
+
+            voice.Source.Play();
+            return new AudioHandle(index, voice.Generation);
+        }
+
+        public AudioHandle PlaySfxScheduled(SoundDefinition def, in SoundPlayOptions options, double dspTime)
+        {
+            var voice = PrepareVoice(def, options, out int index);
+            if (voice == null) return AudioHandle.Invalid;
+
+            _pool.PlayScheduled(voice, dspTime);
+            return new AudioHandle(index, voice.Generation);
+        }
+
+        // Acquires a voice and sets it up for a sound, ready to start. Null if it can't play.
+        private AudioVoicePool.Voice PrepareVoice(SoundDefinition def, in SoundPlayOptions options, out int index)
+        {
+            index = -1;
+            if (def == null) return null;
+            var clip = options.ClipOverride != null ? options.ClipOverride : def.PickClip();
             if (clip == null)
             {
                 Debug.LogWarning($"[UnityAudioProvider] Sound '{def.Id}' has no clip assigned.");
-                return AudioHandle.Invalid;
+                return null;
             }
 
-            // Per-sound voice limit: steal the oldest instance of this sound before acquiring.
-            if (def.MaxVoices > 0 && _pool.CountActive(def.Id) >= def.MaxVoices)
+            // Per-sound voice limit: refuse, or steal the oldest instance of this sound before acquiring.
+            if (def.MaxVoices > 0 && _pool.CountActive(def) >= def.MaxVoices)
             {
-                int steal = _pool.OldestActiveIndexFor(def.Id);
+                if (def.LimitMode == VoiceLimitMode.Refuse) return null;
+                int steal = _pool.OldestActiveIndexFor(def);
                 if (steal >= 0) _pool.Release(steal);
             }
 
-            var voice = _pool.Acquire(def.Bus, def.Id, out int index);
+            var voice = _pool.Acquire(def, out index);
+            if (voice == null) return null;
             var src = voice.Source;
 
+            // Loading up front lets the pool see the Loading state and not mistake the wait for an end.
+            if (clip.loadType != AudioClipLoadType.Streaming && clip.loadState == AudioDataLoadState.Unloaded)
+                clip.LoadAudioData();
+
             src.clip = clip;
-            src.loop = def.Loop;
-            src.volume = def.Volume;
-            src.pitch = def.PickPitch();
+            src.loop = options.Loop ?? def.Loop;
+            src.volume = options.Volume ?? def.Volume;
+            src.pitch = options.Pitch ?? def.PickPitch();
             src.priority = def.Priority;
             src.outputAudioMixerGroup = _config != null ? _config.GetBinding(def.Bus)?.Group : null;
 
-            bool use3D = spatial && def.SpatialBlend > 0f;
+            bool use3D = options.Spatial && def.SpatialBlend > 0f;
             src.spatialBlend = use3D ? def.SpatialBlend : 0f;
             if (use3D)
             {
-                src.transform.position = position;
+                src.transform.position = options.Position;
                 src.minDistance = def.MinDistance;
                 src.maxDistance = def.MaxDistance;
-                src.rolloffMode = AudioRolloffMode.Linear;
+                ApplyRolloff(src, def);
             }
             else
             {
                 src.transform.localPosition = Vector3.zero;
             }
 
-            src.Play();
-            return new AudioHandle(index, voice.Generation);
+            if (options.Follow != null)
+            {
+                if (!use3D) WarnFollowOn2D(def.Id);
+                _pool.Attach(voice, options.Follow);
+            }
+
+            return voice;
+        }
+
+        private static void ApplyRolloff(AudioSource src, SoundDefinition def)
+        {
+            if (def.Rolloff != AudioRolloffMode.Custom)
+            {
+                src.rolloffMode = def.Rolloff;
+                return;
+            }
+
+            if (def.RolloffCurve == null || def.RolloffCurve.length == 0)
+            {
+                Debug.LogWarning($"[UnityAudioProvider] Sound '{def.Id}' uses Custom rolloff but has no curve; using Linear.");
+                src.rolloffMode = AudioRolloffMode.Linear;
+                return;
+            }
+
+            src.rolloffMode = AudioRolloffMode.Custom;
+            src.SetCustomCurve(AudioSourceCurveType.CustomRolloff, def.RolloffCurve);
+        }
+
+        private static void WarnFollowOn2D(string soundId)
+        {
+            Debug.LogWarning($"[UnityAudioProvider] Sound '{soundId}' is following an object but plays in 2D, so the movement won't be heard. " +
+                             "Set Spatial on the play options and give the sound a SpatialBlend above 0.");
+        }
+
+        // --- Clip data -------------------------------------------------------
+
+        public void LoadSounds(IReadOnlyList<SoundDefinition> sounds, Action<float> progress, Action done)
+            => _clipLoader.Load(sounds, progress, done);
+
+        public void UnloadSounds(IReadOnlyList<SoundDefinition> sounds) => _clipLoader.Unload(sounds);
+
+        public bool IsLoaded(SoundDefinition sound) => AudioClipLoader.IsLoaded(sound);
+
+        private bool IsClipInUse(AudioClip clip)
+        {
+            if (_pool.IsClipInUse(clip)) return true;
+            if (_stems != null && _stems.IsClipInUse(clip)) return true;
+            // The current track counts even before it starts; a source that was stopped keeps its clip, so otherwise check isPlaying.
+            if (_currentMusic != null && ActiveMusicSource.clip == clip) return true;
+            return (_musicA.isPlaying && _musicA.clip == clip) || (_musicB.isPlaying && _musicB.clip == clip);
+        }
+
+        // Runs for the provider's lifetime: per-frame work that isn't tied to a voice.
+        private IEnumerator TickRoutine()
+        {
+            while (true)
+            {
+                if (!_paused)
+                {
+                    TickMusicLoopCount();
+                    _clipLoader.ProcessPendingUnloads(); // paused sources read as not playing, so wait until resume
+                }
+                yield return null;
+            }
         }
 
         // --- Music -----------------------------------------------------------
 
-        public AudioHandle PlayMusic(SoundDefinition def, float fadeSeconds)
+        private AudioSource ActiveMusicSource => _musicAActive ? _musicA : _musicB;
+
+        public bool IsMusicPlaying => _currentMusic != null;
+
+        public SoundDefinition CurrentMusic => _currentMusic != null ? _currentMusic : null;
+
+        public float MusicTime => _currentMusic != null ? ActiveMusicSource.time : 0f;
+
+        public float MusicLength
+        {
+            get
+            {
+                if (_currentMusic == null) return 0f;
+                var clip = ActiveMusicSource.clip;
+                return clip != null ? clip.length : 0f;
+            }
+        }
+
+        public int MusicLoopCount => _currentMusic != null ? _musicLoopCount : 0;
+
+        // Unity has no loop callback: the playhead moving backwards means the track wrapped.
+        private void TickMusicLoopCount()
+        {
+            if (_currentMusic == null) return;
+            var src = ActiveMusicSource;
+            if (!src.isPlaying) return;
+            int samples = src.timeSamples;
+            if (samples < _lastMusicSamples) _musicLoopCount++;
+            _lastMusicSamples = samples;
+        }
+
+        public AudioHandle PlayMusic(SoundDefinition def, float fadeSeconds) => PlayMusic(def, fadeSeconds, null);
+
+        public AudioHandle PlayMusic(SoundDefinition def, float fadeSeconds, float? volume)
         {
             if (def == null) return AudioHandle.Invalid;
             var clip = def.PickClip();
@@ -217,8 +359,12 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             incoming.volume = 0f;
             incoming.Play();
 
+            _currentMusic = def;
+            _musicLoopCount = 0;
+            _lastMusicSamples = 0;
+
             if (_musicRoutine != null) _pool.StopCoroutine(_musicRoutine);
-            _musicRoutine = _pool.StartCoroutine(CrossfadeMusic(incoming, outgoing, def.Volume, fadeSeconds));
+            _musicRoutine = _pool.StartCoroutine(CrossfadeMusic(incoming, outgoing, volume ?? def.Volume, fadeSeconds));
 
             return AudioHandle.Invalid; // music is controlled via StopMusic, not a voice handle
         }
@@ -233,6 +379,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
         // Fades out the regular A/B music sources only (not stems). Expects a resolved fade.
         private void StopMusicSources(float fadeSeconds)
         {
+            _currentMusic = null;
             AudioSource active = _musicAActive ? _musicA : _musicB;
             AudioSource other = _musicAActive ? _musicB : _musicA;
             if (_musicRoutine != null) _pool.StopCoroutine(_musicRoutine);
@@ -257,6 +404,8 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             }
 
             fadeSeconds = ResolveMusicFade(fadeSeconds);
+
+            _currentMusic = null;
 
             // One music at a time: fade out regular A/B music if it's playing.
             if ((_musicA != null && (_musicA.isPlaying || _musicA.volume > 0f)) ||
@@ -472,6 +621,28 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
             src.time = Mathf.Clamp(seconds, 0f, Mathf.Max(0f, src.clip.length - 0.01f));
         }
 
+        public bool IsVoicePlaying(AudioHandle handle) => _pool.IsVoicePlaying(handle);
+
+        public void AttachVoice(AudioHandle handle, Transform target)
+        {
+            if (!_pool.TryResolve(handle, out var voice, out _) || voice.Source == null) return;
+            if (target != null && voice.Source.spatialBlend <= 0f && voice.Sound != null) WarnFollowOn2D(voice.Sound.Id);
+            _pool.Attach(voice, target);
+        }
+
+        public void SetVoicePosition(AudioHandle handle, Vector3 position)
+        {
+            if (!_pool.TryResolve(handle, out var voice, out _) || voice.Source == null) return;
+            _pool.Attach(voice, null); // otherwise the target's position would overwrite this next frame
+            voice.Source.transform.position = position;
+        }
+
+        public void SetVoiceScheduledEnd(AudioHandle handle, double dspTime)
+        {
+            if (_pool.TryResolve(handle, out var voice, out _) && voice.Source != null)
+                _pool.SetScheduledEnd(voice, dspTime);
+        }
+
         private IEnumerator FadeOutVoice(AudioVoicePool.Voice voice, int index, float seconds)
         {
             int generation = voice.Generation;
@@ -500,6 +671,7 @@ namespace Kaddumi.UnityTools.Audio.Providers.UnityAudio
 
         public void SetPaused(bool paused)
         {
+            _paused = paused;
             _pool.SetPaused(paused);
             if (_musicA != null) { if (paused) _musicA.Pause(); else _musicA.UnPause(); }
             if (_musicB != null) { if (paused) _musicB.Pause(); else _musicB.UnPause(); }
