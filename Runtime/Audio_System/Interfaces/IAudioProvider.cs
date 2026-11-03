@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Kaddumi.UnityTools.Audio.Core;
 using Kaddumi.UnityTools.Audio.Data;
 using UnityEngine;
@@ -37,6 +38,66 @@ namespace Kaddumi.UnityTools.Audio.Interfaces
 
         /// <summary>Fades out and stops the current music.</summary>
         void StopMusic(float fadeSeconds);
+
+        // --- Playback options (optional) -------------------------------------
+        // Default implementations keep existing third-party providers compiling; providers that
+        // support these features override them.
+
+        /// <summary>
+        /// Plays an SFX with per-play overrides. The default implementation forwards to
+        /// <see cref="PlaySfx"/> using only the position and spatial flag.
+        /// </summary>
+        AudioHandle PlaySfxWithOptions(SoundDefinition def, in SoundPlayOptions options)
+            => PlaySfx(def, options.Position, options.Spatial);
+
+        /// <summary>
+        /// Plays an SFX starting at an exact <paramref name="dspTime"/> (see <c>AudioSettings.dspTime</c>),
+        /// for gapless playback. The voice counts as playing while it waits. The default implementation
+        /// logs a warning and returns an invalid handle.
+        /// </summary>
+        AudioHandle PlaySfxScheduled(SoundDefinition def, in SoundPlayOptions options, double dspTime)
+        {
+            Debug.LogWarning("[IAudioProvider] " + GetType().Name + " does not support scheduled playback.");
+            return AudioHandle.Invalid;
+        }
+
+        /// <summary>Crossfades to a new music track at an explicit volume; null uses the sound's own. The default implementation ignores the volume.</summary>
+        AudioHandle PlayMusic(SoundDefinition def, float fadeSeconds, float? volume) => PlayMusic(def, fadeSeconds);
+
+        // --- Music state (optional) ------------------------------------------
+
+        /// <summary>True from <c>PlayMusic</c> until the music is stopped, including while paused. Stems don't count; see <see cref="CurrentStemSetId"/>. False by default.</summary>
+        bool IsMusicPlaying => false;
+
+        /// <summary>The sound started by <c>PlayMusic</c>, or null when none is. Null by default.</summary>
+        SoundDefinition CurrentMusic => null;
+
+        /// <summary>Playback position of the current music in seconds. 0 by default.</summary>
+        float MusicTime => 0f;
+
+        /// <summary>Length of the current music clip in seconds. 0 by default.</summary>
+        float MusicLength => 0f;
+
+        /// <summary>How many times the current music has wrapped back to its start. 0 by default.</summary>
+        int MusicLoopCount => 0;
+
+        // --- Clip data (optional) --------------------------------------------
+
+        /// <summary>
+        /// Adds a reference to the clips of <paramref name="sounds"/> and loads them.
+        /// <paramref name="done"/> always fires once. The default implementation reports completion immediately.
+        /// </summary>
+        void LoadSounds(IReadOnlyList<SoundDefinition> sounds, Action<float> progress, Action done)
+        {
+            progress?.Invoke(1f);
+            done?.Invoke();
+        }
+
+        /// <summary>Drops the references added by <see cref="LoadSounds"/>. A clip unloads once nothing needs or plays it. No-op by default.</summary>
+        void UnloadSounds(IReadOnlyList<SoundDefinition> sounds) { }
+
+        /// <summary>True when every clip of the sound is ready to play. True for any sound by default.</summary>
+        bool IsLoaded(SoundDefinition sound) => sound != null;
 
         // --- Music stems (optional) ------------------------------------------
         // Default implementations keep existing third-party providers compiling; providers that
@@ -116,6 +177,31 @@ namespace Kaddumi.UnityTools.Audio.Interfaces
 
         /// <summary>Seeks a live voice to a playback position in seconds (clamped to the clip). No-op if the handle is stale.</summary>
         void SetVoiceTime(AudioHandle handle, float seconds);
+
+        /// <summary>
+        /// Makes a voice's position track <paramref name="target"/>; null detaches it. If the target is
+        /// destroyed, a looping voice stops and a one-shot finishes at its last position. No-op if the
+        /// handle is stale, and no-op by default.
+        /// </summary>
+        void AttachVoice(AudioHandle handle, Transform target) { }
+
+        /// <summary>Moves a live voice, detaching it from any target. No-op if the handle is stale, and no-op by default.</summary>
+        void SetVoicePosition(AudioHandle handle, Vector3 position) { }
+
+        /// <summary>
+        /// True while a voice is playing or waiting to: paused, fading, loading, or scheduled but not
+        /// started. False once it has ended or the handle is stale. False by default.
+        /// </summary>
+        bool IsVoicePlaying(AudioHandle handle) => false;
+
+        /// <summary>
+        /// Raised when a voice reaches its natural end. Not raised when it is stopped or stolen, or when
+        /// a looping voice stops because its target was destroyed. Never raised by default.
+        /// </summary>
+        event Action<AudioHandle> VoiceFinished { add { } remove { } }
+
+        /// <summary>Ends a voice at an exact DSP time, including a looping voice. No-op if the handle is stale, and no-op by default.</summary>
+        void SetVoiceScheduledEnd(AudioHandle handle, double dspTime) { }
 
         /// <summary>Stops every active voice on a bus immediately.</summary>
         void StopBus(AudioBus bus);

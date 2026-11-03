@@ -45,9 +45,19 @@ namespace Kaddumi.UnityTools.Audio.Data
         [Tooltip("3D max distance: beyond this the sound stops attenuating. Ignored when SpatialBlend is 0.")]
         [Min(0f)] public float MaxDistance = 50f;
 
-        [Tooltip("Maximum simultaneous voices for this sound. When exceeded, the oldest voice is stolen. " +
+        [Tooltip("How volume falls off with distance. Ignored when SpatialBlend is 0.")]
+        public AudioRolloffMode Rolloff = AudioRolloffMode.Linear;
+
+        [Tooltip("Volume over distance, used when Rolloff is Custom. X runs from 0 (the source) to 1 (Max Distance); " +
+                 "Y is the volume.")]
+        public AnimationCurve RolloffCurve = AnimationCurve.Linear(0f, 1f, 1f, 0f);
+
+        [Tooltip("Maximum simultaneous voices for this sound. Limit Mode decides what happens when it is reached. " +
                  "0 = unlimited.")]
         [Min(0)] public int MaxVoices = 0;
+
+        [Tooltip("When Max Voices is reached: steal this sound's oldest voice, or refuse the new play.")]
+        public VoiceLimitMode LimitMode = VoiceLimitMode.StealOldest;
 
         [Tooltip("AudioSource priority (0 = most important, 256 = least). Lower survives Unity's own voice limiting.")]
         [Range(0, 256)] public int Priority = 128;

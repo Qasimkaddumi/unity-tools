@@ -9,7 +9,7 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
     public class AudioConfigEditor : Editor
     {
         private SerializedProperty _mixer, _buses;
-        private SerializedProperty _initialPoolSize, _maxPoolSize;
+        private SerializedProperty _initialPoolSize, _maxPoolSize, _priorityStealing;
         private SerializedProperty _defaultMusicFadeSeconds;
         private SerializedProperty _duckBus, _duckTargetVolume, _duckAttackSeconds, _duckHoldSeconds, _duckReleaseSeconds;
         private SerializedProperty _minDecibels;
@@ -21,6 +21,7 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
             _buses = serializedObject.FindProperty(nameof(AudioConfig.Buses));
             _initialPoolSize = serializedObject.FindProperty(nameof(AudioConfig.InitialPoolSize));
             _maxPoolSize = serializedObject.FindProperty(nameof(AudioConfig.MaxPoolSize));
+            _priorityStealing = serializedObject.FindProperty(nameof(AudioConfig.PriorityStealing));
             _defaultMusicFadeSeconds = serializedObject.FindProperty(nameof(AudioConfig.DefaultMusicFadeSeconds));
             _duckBus = serializedObject.FindProperty(nameof(AudioConfig.DuckBus));
             _duckTargetVolume = serializedObject.FindProperty(nameof(AudioConfig.DuckTargetVolume));
@@ -89,6 +90,7 @@ namespace Kaddumi.UnityTools.EditorTools.ScriptableObjectEditors
                 EditorGUILayout.PropertyField(_maxPoolSize);
                 if (_maxPoolSize.intValue < _initialPoolSize.intValue)
                     EditorGUILayout.HelpBox("Max Pool Size is smaller than Initial Pool Size.", MessageType.Error);
+                EditorGUILayout.PropertyField(_priorityStealing);
             }
             EditorGUILayout.Space(6);
 
