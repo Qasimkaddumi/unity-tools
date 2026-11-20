@@ -20,6 +20,7 @@ namespace Kaddumi.UnityTools.Ads.Providers
         private const string SdkKey = "YOUR_APPLOVIN_SDK_KEY";
 
         public bool IsConsentGranted { get; private set; }
+        public bool CanRequestAds { get; private set; }
 
         // MAX callbacks report only the ad unit id, so remember the banner id to Show/Hide it.
         private string bannerAdUnitId;
@@ -57,9 +58,9 @@ namespace Kaddumi.UnityTools.Ads.Providers
         public void LoadAd(AdType adType, string adUnitId)
         {
             if (string.IsNullOrEmpty(adUnitId)) return;
-            if (!IsConsentGranted)
+            if (!CanRequestAds)
             {
-                Debug.Log($"[Ads] Load ad {adType} was blocked due to lack of consent");
+                Debug.Log($"[Ads] Load ad {adType} deferred: consent not decided yet");
                 return;
             }
 
@@ -102,28 +103,31 @@ namespace Kaddumi.UnityTools.Ads.Providers
 #endif
         }
 
-        public void ShowAd(AdType adType, string adUnitId)
+        public bool ShowAd(AdType adType, string adUnitId)
         {
-            if (!IsConsentGranted)
+            if (!CanRequestAds)
             {
-                Debug.Log($"[Ads] Show ad {adType} was blocked due to lack of consent");
-                return;
+                Debug.Log($"[Ads] Show ad {adType} skipped: consent not decided yet");
+                return false;
             }
 
 #if AppLovinMAX_SDK_INSTALLED
+            if (!IsAdReady(adType, adUnitId)) return false;
+
             switch (adType)
             {
                 case AdType.Banner:
                     MaxSdk.ShowBanner(adUnitId);
-                    break;
+                    return true;
                 case AdType.Interstitial:
-                    if (IsAdReady(adType, adUnitId)) MaxSdk.ShowInterstitial(adUnitId);
-                    break;
+                    MaxSdk.ShowInterstitial(adUnitId);
+                    return true;
                 case AdType.Rewarded:
-                    if (IsAdReady(adType, adUnitId)) MaxSdk.ShowRewardedAd(adUnitId);
-                    break;
+                    MaxSdk.ShowRewardedAd(adUnitId);
+                    return true;
             }
 #endif
+            return false;
         }
 
 #if AppLovinMAX_SDK_INSTALLED
@@ -162,9 +166,10 @@ namespace Kaddumi.UnityTools.Ads.Providers
         }
 #endif
 
-        public void SetConsentStatus(bool granted)
+        public void SetConsent(bool canRequestAds, bool personalized)
         {
-            IsConsentGranted = granted;
+            CanRequestAds = canRequestAds;
+            IsConsentGranted = personalized;
 #if AppLovinMAX_SDK_INSTALLED
             ApplyConsent();
 #endif

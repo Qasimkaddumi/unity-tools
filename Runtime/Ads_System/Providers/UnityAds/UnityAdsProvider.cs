@@ -29,6 +29,7 @@ namespace Kaddumi.UnityTools.Ads.Providers
         private const bool TestMode = false;
 
         public bool IsConsentGranted { get; private set; }
+        public bool CanRequestAds { get; private set; }
 
         // Unity Ads reports only the placement id in callbacks, so map each placement to its AdType.
         private readonly Dictionary<string, AdType> placementTypes = new Dictionary<string, AdType>();
@@ -73,9 +74,9 @@ namespace Kaddumi.UnityTools.Ads.Providers
         public void LoadAd(AdType adType, string adUnitId)
         {
             if (string.IsNullOrEmpty(adUnitId)) return;
-            if (!IsConsentGranted)
+            if (!CanRequestAds)
             {
-                Debug.Log($"[Ads] Load ad {adType} was blocked due to lack of consent");
+                Debug.Log($"[Ads] Load ad {adType} deferred: consent not decided yet");
                 return;
             }
 
@@ -108,26 +109,28 @@ namespace Kaddumi.UnityTools.Ads.Providers
             return loadedPlacements.Contains(adUnitId);
         }
 
-        public void ShowAd(AdType adType, string adUnitId)
+        public bool ShowAd(AdType adType, string adUnitId)
         {
-            if (!IsConsentGranted)
+            if (!CanRequestAds)
             {
-                Debug.Log($"[Ads] Show ad {adType} was blocked due to lack of consent");
-                return;
+                Debug.Log($"[Ads] Show ad {adType} skipped: consent not decided yet");
+                return false;
             }
 
 #if UnityAds_SDK_INSTALLED
+            if (!IsAdReady(adType, adUnitId)) return false;
+
             if (adType == AdType.Banner)
             {
                 Advertisement.Banner.SetPosition(BannerPosition.BOTTOM_CENTER);
                 Advertisement.Banner.Show(adUnitId);
-                return;
+                return true;
             }
 
-            if (IsAdReady(adType, adUnitId))
-            {
-                Advertisement.Show(adUnitId, this);
-            }
+            Advertisement.Show(adUnitId, this);
+            return true;
+#else
+            return false;
 #endif
         }
 
@@ -146,9 +149,10 @@ namespace Kaddumi.UnityTools.Ads.Providers
 #endif
         }
 
-        public void SetConsentStatus(bool granted)
+        public void SetConsent(bool canRequestAds, bool personalized)
         {
-            IsConsentGranted = granted;
+            CanRequestAds = canRequestAds;
+            IsConsentGranted = personalized;
             ApplyConsent();
         }
 

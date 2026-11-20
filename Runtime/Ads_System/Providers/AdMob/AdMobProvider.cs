@@ -22,7 +22,8 @@ namespace Kaddumi.UnityTools.Ads.Providers
 
     public class AdMobProvider : IAdProvider
     {
-        public bool IsConsentGranted { get; set; }
+        public bool IsConsentGranted { get; private set; }
+        public bool CanRequestAds { get; private set; }
 #if AdMob_SDK_INSTALLED
         private InterstitialAd interstitialAd;
         private RewardedAd rewardedAd;
@@ -143,9 +144,9 @@ namespace Kaddumi.UnityTools.Ads.Providers
         public void LoadAd(AdType adType, string adUnitId)
         {
             if (string.IsNullOrEmpty(adUnitId)) return;
-            if (!IsConsentGranted)
+            if (!CanRequestAds)
             {
-                Debug.Log($"[Ads] Load ad {adType} Event was blocked due to lack of consent");
+                Debug.Log($"[Ads] Load ad {adType} deferred: consent not decided yet");
                 return;
             }
 
@@ -188,41 +189,53 @@ namespace Kaddumi.UnityTools.Ads.Providers
 #endif
         }
 
-        public void ShowAd(AdType adType, string adUnitId)
+        public bool ShowAd(AdType adType, string adUnitId)
         {
-
-            if (!IsConsentGranted)
+            if (!CanRequestAds)
             {
-                Debug.Log($"[Ads] Show ad {adType} Event was blocked due to lack of consent");
-                return;
+                Debug.Log($"[Ads] Show ad {adType} skipped: consent not decided yet");
+                return false;
             }
 
-
 #if AdMob_SDK_INSTALLED
+            if (!IsAdReady(adType, adUnitId)) return false;
+
             switch (adType)
             {
                 case AdType.Banner:
                     // Banner shows automatically on load usually, but can be managed here
-                    if (bannerView != null) bannerView.Show();
-                    break;
+                    bannerView.Show();
+                    return true;
                 case AdType.Interstitial:
-                    if (IsAdReady(adType, adUnitId))
-                    {
-                        interstitialAd.Show();
-                    }
-                    break;
+                    interstitialAd.Show();
+                    return true;
                 case AdType.Rewarded:
-                    if (IsAdReady(adType, adUnitId))
+                    rewardedAd.Show((Reward reward) =>
                     {
-                        rewardedAd.Show((Reward reward) =>
-                        {
-                            OnUserEarnedReward?.Invoke(new AdReward(reward.Type, reward.Amount));
-                        });
-                    }
-                    break;
+                        OnUserEarnedReward?.Invoke(new AdReward(reward.Type, reward.Amount));
+                    });
+                    return true;
             }
 #endif
+            return false;
         }
+
+#if AdMob_SDK_INSTALLED
+        /// <summary>
+        /// Builds an ad request. Without personalisation consent the request is flagged
+        /// non-personalised (npa=1), so users who declined still see ads.
+        /// UMP's TCF string is also read by the SDK automatically.
+        /// </summary>
+        private AdRequest BuildRequest()
+        {
+            AdRequest request = new AdRequest();
+            if (!IsConsentGranted)
+            {
+                request.Extras.Add("npa", "1");
+            }
+            return request;
+        }
+#endif
 
         // --- Implementation Details (AdMob Specifics) ---
 
@@ -234,7 +247,7 @@ namespace Kaddumi.UnityTools.Ads.Providers
             bannerView = new BannerView(id, AdSize.Banner, AdPosition.Bottom);
 
             // Create Request
-            AdRequest request = new AdRequest();
+            AdRequest request = BuildRequest();
 
             // Load
             bannerView.LoadAd(request);
@@ -249,7 +262,7 @@ namespace Kaddumi.UnityTools.Ads.Providers
         private void LoadInterstitial(string id)
         {
 #if AdMob_SDK_INSTALLED
-            AdRequest request = new AdRequest();
+            AdRequest request = BuildRequest();
 
             InterstitialAd.Load(id, request, (InterstitialAd ad, LoadAdError error) =>
             {
@@ -271,9 +284,11 @@ namespace Kaddumi.UnityTools.Ads.Providers
 
                 interstitialAd.OnAdFullScreenContentFailed += (AdError err) =>
                 {
-                    // Handle show failure if needed
+                    Debug.LogError($"[AdMobProvider] Interstitial failed to show: {err?.GetMessage()}");
                     interstitialAd.Destroy();
                     interstitialAd = null;
+                    // Report it as closed so whoever is waiting on the ad can continue.
+                    OnAdClosed?.Invoke(AdType.Interstitial);
                 };
 
                 OnAdLoaded?.Invoke(AdType.Interstitial);
@@ -288,7 +303,7 @@ namespace Kaddumi.UnityTools.Ads.Providers
 
 
 #if AdMob_SDK_INSTALLED
-            AdRequest request = new AdRequest();
+            AdRequest request = BuildRequest();
 
             RewardedAd.Load(id, request, (RewardedAd ad, LoadAdError error) =>
             {
@@ -310,8 +325,11 @@ namespace Kaddumi.UnityTools.Ads.Providers
 
                 rewardedAd.OnAdFullScreenContentFailed += (AdError err) =>
                 {
+                    Debug.LogError($"[AdMobProvider] Rewarded ad failed to show: {err?.GetMessage()}");
                     rewardedAd.Destroy();
                     rewardedAd = null;
+                    // Report it as closed (no reward) so the caller's onFail runs.
+                    OnAdClosed?.Invoke(AdType.Rewarded);
                 };
 
                 OnAdLoaded?.Invoke(AdType.Rewarded);
@@ -319,9 +337,10 @@ namespace Kaddumi.UnityTools.Ads.Providers
 #endif
         }
 
-        public void SetConsentStatus(bool granted)
+        public void SetConsent(bool canRequestAds, bool personalized)
         {
-            IsConsentGranted = granted;
+            CanRequestAds = canRequestAds;
+            IsConsentGranted = personalized;
             UpdateMediationConsent();
         }
     }

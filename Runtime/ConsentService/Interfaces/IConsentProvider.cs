@@ -25,6 +25,14 @@ namespace Kaddumi.UnityTools.Consent
         void RequestConsent(Action<ConsentStatus> onResolved);
 
         /// <summary>
+        /// The decision remembered from a previous session, read synchronously without showing UI
+        /// or touching the network. Returns <see cref="ConsentStatus.Unknown"/> when there is none.
+        /// Lets returning users start with ads/analytics enabled while <see cref="RequestConsent"/>
+        /// refreshes the decision in the background.
+        /// </summary>
+        ConsentStatus GetLastKnownStatus();
+
+        /// <summary>
         /// Re-open the consent UI so the user can review or change a previous choice,
         /// regardless of region. Invokes <paramref name="onResolved"/> with the new status.
         /// </summary>

@@ -23,6 +23,7 @@ namespace Kaddumi.UnityTools.Ads.Providers
         private const string AppKey = "YOUR_LEVELPLAY_APP_KEY";
 
         public bool IsConsentGranted { get; private set; }
+        public bool CanRequestAds { get; private set; }
 
 #if LevelPlay_SDK_INSTALLED
         private LevelPlayInterstitialAd interstitialAd;
@@ -64,9 +65,9 @@ namespace Kaddumi.UnityTools.Ads.Providers
         public void LoadAd(AdType adType, string adUnitId)
         {
             if (string.IsNullOrEmpty(adUnitId)) return;
-            if (!IsConsentGranted)
+            if (!CanRequestAds)
             {
-                Debug.Log($"[Ads] Load ad {adType} was blocked due to lack of consent");
+                Debug.Log($"[Ads] Load ad {adType} deferred: consent not decided yet");
                 return;
             }
 
@@ -105,28 +106,31 @@ namespace Kaddumi.UnityTools.Ads.Providers
 #endif
         }
 
-        public void ShowAd(AdType adType, string adUnitId)
+        public bool ShowAd(AdType adType, string adUnitId)
         {
-            if (!IsConsentGranted)
+            if (!CanRequestAds)
             {
-                Debug.Log($"[Ads] Show ad {adType} was blocked due to lack of consent");
-                return;
+                Debug.Log($"[Ads] Show ad {adType} skipped: consent not decided yet");
+                return false;
             }
 
 #if LevelPlay_SDK_INSTALLED
+            if (!IsAdReady(adType, adUnitId)) return false;
+
             switch (adType)
             {
                 case AdType.Banner:
-                    if (bannerAd != null) bannerAd.ShowAd();
-                    break;
+                    bannerAd.ShowAd();
+                    return true;
                 case AdType.Interstitial:
-                    if (IsAdReady(adType, adUnitId)) interstitialAd.ShowAd();
-                    break;
+                    interstitialAd.ShowAd();
+                    return true;
                 case AdType.Rewarded:
-                    if (IsAdReady(adType, adUnitId)) rewardedAd.ShowAd();
-                    break;
+                    rewardedAd.ShowAd();
+                    return true;
             }
 #endif
+            return false;
         }
 
         // --- LevelPlay specifics ---
@@ -141,6 +145,8 @@ namespace Kaddumi.UnityTools.Ads.Providers
                 interstitialAd.OnAdLoadFailed += error =>
                     OnAdFailedToLoad?.Invoke(AdType.Interstitial, new AdErrorDomain(error.ErrorCode, error.ErrorMessage));
                 interstitialAd.OnAdClosed += _ => OnAdClosed?.Invoke(AdType.Interstitial);
+                // A failed show never closes, so report it as closed to release the caller.
+                interstitialAd.OnAdDisplayFailed += _ => OnAdClosed?.Invoke(AdType.Interstitial);
             }
             interstitialAd.LoadAd();
         }
@@ -154,6 +160,7 @@ namespace Kaddumi.UnityTools.Ads.Providers
                 rewardedAd.OnAdLoadFailed += error =>
                     OnAdFailedToLoad?.Invoke(AdType.Rewarded, new AdErrorDomain(error.ErrorCode, error.ErrorMessage));
                 rewardedAd.OnAdClosed += _ => OnAdClosed?.Invoke(AdType.Rewarded);
+                rewardedAd.OnAdDisplayFailed += _ => OnAdClosed?.Invoke(AdType.Rewarded);
                 rewardedAd.OnAdRewarded += (_, reward) =>
                     OnUserEarnedReward?.Invoke(new AdReward(reward.Name, reward.Amount));
             }
@@ -178,9 +185,10 @@ namespace Kaddumi.UnityTools.Ads.Providers
         }
 #endif
 
-        public void SetConsentStatus(bool granted)
+        public void SetConsent(bool canRequestAds, bool personalized)
         {
-            IsConsentGranted = granted;
+            CanRequestAds = canRequestAds;
+            IsConsentGranted = personalized;
 #if LevelPlay_SDK_INSTALLED
             ApplyConsent();
 #endif

@@ -29,8 +29,15 @@ namespace Kaddumi.UnityTools.Consent
 
         public ConsentStatus CurrentStatus { get; private set; }
 
+        /// <summary>True when the user allowed personalised ads and analytics.</summary>
         public bool IsConsentGranted => CurrentStatus == ConsentStatus.Granted;
         public bool IsConsentUnknown => CurrentStatus == ConsentStatus.Unknown;
+
+        /// <summary>
+        /// True once the user has decided (either way) or no decision is required. Ads may be
+        /// requested whenever this is true; they are non-personalised unless <see cref="IsConsentGranted"/>.
+        /// </summary>
+        public bool CanRequestAds => CurrentStatus != ConsentStatus.Unknown;
 
         /// <summary>Raised whenever consent is resolved or changed. The bool is <c>IsConsentGranted</c>.</summary>
         public event Action<bool> OnConsentChanged;
@@ -57,10 +64,15 @@ namespace Kaddumi.UnityTools.Consent
 
             _provider = consentProvider.CreateProvider();
 
+            // Start from the decision remembered from last session, so returning users don't begin
+            // every launch blocked while the provider re-checks (UMP always goes to the network).
+            UpdateStatus(_provider.GetLastKnownStatus());
+
             // The provider resolves synchronously when a decision is already stored or not required
             // in the user's region, and asynchronously when it has to show a form/dialog. In the
             // async case we return control to the ServiceLocator immediately (below) so app startup
-            // isn't blocked on user input; ads/analytics stay gated until OnConsentChanged fires.
+            // isn't blocked on user input. Ads and analytics subscribe to OnConsentChanged and pick
+            // up the answer when it arrives.
             _provider.RequestConsent(status =>
             {
                 UpdateStatus(status);
@@ -114,6 +126,7 @@ namespace Kaddumi.UnityTools.Consent
 
         private void UpdateStatus(ConsentStatus newStatus)
         {
+            if (newStatus == CurrentStatus) return;
             CurrentStatus = newStatus;
             OnConsentChanged?.Invoke(newStatus == ConsentStatus.Granted);
         }

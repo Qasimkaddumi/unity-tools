@@ -42,6 +42,11 @@ namespace Kaddumi.UnityTools.Consent.Providers
             ShowDialog(onResolved);
         }
 
+        public ConsentStatus GetLastKnownStatus()
+        {
+            return ConsentStorage.HasStoredConsent(_version) ? ConsentStorage.Load() : ConsentStatus.Unknown;
+        }
+
         public void ShowPrivacyOptions(Action<ConsentStatus> onResolved)
         {
             // Always re-present the dialog so the user can change their mind, regardless of region.
