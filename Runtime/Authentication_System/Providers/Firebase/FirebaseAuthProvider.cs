@@ -127,7 +127,9 @@ namespace Kaddumi.UnityTools.Auth.Providers
                             $"Missing token for {credentials.Method} sign-in."));
                         return;
                     }
-                    HandleTask(auth.SignInWithCredentialAsync(credential), onComplete);
+                    // SignInWithCredentialAsync returns Task<FirebaseUser>; this variant returns
+                    // Task<AuthResult> like every other sign-in call here.
+                    HandleTask(auth.SignInAndRetrieveDataWithCredentialAsync(credential), onComplete);
                     break;
             }
 #else

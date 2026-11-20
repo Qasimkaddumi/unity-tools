@@ -30,6 +30,7 @@ namespace Kaddumi.UnityTools.Ads
         private Action currentRewardOnFail;
         private Action currentInterstitiaLCallback;
         private bool userEarnedRewardThisSession = false;
+        private bool providerInitialized;
 
         private void Awake()
         {
@@ -57,12 +58,11 @@ namespace Kaddumi.UnityTools.Ads
             }
 
             provider = adProvider.CreateProvider();
-            provider.SetConsentStatus(Consent.ConsentService.Instance.IsConsentGranted);
-            ConsentService.Instance.OnConsentChanged += (consent) =>
+            ApplyConsent();
+            if (ConsentService.Instance != null)
             {
-                provider.SetConsentStatus(Consent.ConsentService.Instance.IsConsentGranted);
-                Debug.LogWarning($"User consent status: {Consent.ConsentService.Instance.IsConsentGranted}");
-            };
+                ConsentService.Instance.OnConsentChanged += HandleConsentChanged;
+            }
 
 
             // Subscribe to events
@@ -74,14 +74,46 @@ namespace Kaddumi.UnityTools.Ads
             // Initialize the SDK
             provider.Initialize(() =>
             {
+                providerInitialized = true;
                 Debug.LogWarning($"{nameof(AdManager)} Initialized");
                 onComplete?.Invoke();
-                PreLoadAd(AdType.Interstitial);
-                PreLoadAd(AdType.Rewarded);
+                PreloadFullscreenAds();
             });
+        }
 
+        private void OnDestroy()
+        {
+            if (ConsentService.Instance != null)
+            {
+                ConsentService.Instance.OnConsentChanged -= HandleConsentChanged;
+            }
+        }
 
+        private void ApplyConsent()
+        {
+            var consent = ConsentService.Instance;
+            bool canRequestAds = consent != null && consent.CanRequestAds;
+            bool personalized = consent != null && consent.IsConsentGranted;
+            provider.SetConsent(canRequestAds, personalized);
+        }
 
+        private void HandleConsentChanged(bool personalized)
+        {
+            ApplyConsent();
+            Debug.Log($"[AdManager] Consent changed. Can request ads: {provider.CanRequestAds}, personalised: {personalized}");
+
+            // Ads skipped at startup because consent was still pending: load them now.
+            PreloadFullscreenAds();
+        }
+
+        private void PreloadFullscreenAds()
+        {
+            if (!providerInitialized || !autoLoadAds || !provider.CanRequestAds) return;
+
+            if (!provider.IsAdReady(AdType.Interstitial, adConfig.GetAdUnitId(AdType.Interstitial)))
+                PreLoadAd(AdType.Interstitial);
+            if (!provider.IsAdReady(AdType.Rewarded, adConfig.GetAdUnitId(AdType.Rewarded)))
+                PreLoadAd(AdType.Rewarded);
         }
 
 
@@ -100,43 +132,56 @@ namespace Kaddumi.UnityTools.Ads
 
         public void ShowInterstitial(Action onClosed = null)
         {
-            string id = adConfig.GetAdUnitId(AdType.Interstitial);
-            // provider.LoadAd(AdType.Interstitial, id);
-
-            if (provider.IsAdReady(AdType.Interstitial, id))
+            if (provider == null)
             {
-                currentInterstitiaLCallback = onClosed;
-                provider.ShowAd(AdType.Interstitial, id);
-            }
-            else
-            {
-                Debug.LogWarning("[AdManager] Interstitial not ready.");
-                // Optional: Try to load one for next time
-                provider.LoadAd(AdType.Interstitial, id);
+                Debug.LogWarning("[AdManager] ShowInterstitial called before initialization.");
                 onClosed?.Invoke();
+                return;
             }
+
+            string id = adConfig.GetAdUnitId(AdType.Interstitial);
+
+            // Store the callback first in case the SDK reports the close synchronously.
+            currentInterstitiaLCallback = onClosed;
+            if (provider.IsAdReady(AdType.Interstitial, id) && provider.ShowAd(AdType.Interstitial, id))
+            {
+                return;
+            }
+
+            Debug.LogWarning("[AdManager] Interstitial not shown (not ready or consent pending).");
+            currentInterstitiaLCallback = null;
+            // Try to load one for next time
+            provider.LoadAd(AdType.Interstitial, id);
+            onClosed?.Invoke();
         }
 
 
         public void ShowRewardedAd(Action onSuccess, Action onFail)
         {
+            if (provider == null)
+            {
+                Debug.LogWarning("[AdManager] ShowRewardedAd called before initialization.");
+                onFail?.Invoke();
+                return;
+            }
+
             userEarnedRewardThisSession = false;
             string id = adConfig.GetAdUnitId(AdType.Rewarded);
 
-            if (provider.IsAdReady(AdType.Rewarded, id))
+            // Store the callbacks first in case the SDK reports the close synchronously.
+            currentRewardOnSuccess = onSuccess;
+            currentRewardOnFail = onFail;
+            if (provider.IsAdReady(AdType.Rewarded, id) && provider.ShowAd(AdType.Rewarded, id))
             {
-                currentRewardOnSuccess = onSuccess;
-                currentRewardOnFail = onFail;
-                provider.ShowAd(AdType.Rewarded, id);
+                return;
             }
-            else
-            {
-                Debug.LogWarning("[AdManager] Rewarded Ad not ready.");
-                // Attempt reload
-                onFail?.Invoke();
-                provider.LoadAd(AdType.Rewarded, id);
 
-            }
+            Debug.LogWarning("[AdManager] Rewarded ad not shown (not ready or consent pending).");
+            currentRewardOnSuccess = null;
+            currentRewardOnFail = null;
+            // Attempt reload
+            provider.LoadAd(AdType.Rewarded, id);
+            onFail?.Invoke();
         }
 
 
